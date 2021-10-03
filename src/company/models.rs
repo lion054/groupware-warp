@@ -18,6 +18,22 @@ fn validate_sort_by(sort_by: &str) -> Result<(), ValidationError> {
     }
 }
 
+#[derive(Clone, Debug, Validate, Serialize, Deserialize)]
+pub struct CreateCompanyParams {
+    #[validate(required)]
+    pub name: Option<String>,
+    #[validate(required)]
+    pub since: Option<DateTime<Utc>>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CreateCompanyRequest {
+    pub name: String,
+    pub since: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+    pub modified_at: DateTime<Utc>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CompanyResponse {
     pub _id: String,

@@ -5,11 +5,10 @@ use arangors::{
     },
     AqlQuery, Collection, Database, Document,
 };
+use chrono::prelude::*;
 use serde_json::{Value, to_value};
 use std::{
-    collections::HashMap,
     convert::Infallible,
-    thread,
     vec::Vec,
 };
 use tokio;
@@ -18,7 +17,12 @@ use warp;
 
 use crate::config::db_database;
 use crate::database::{DbConn, DbPool};
-use crate::company::{CompanyResponse, FindCompaniesParams};
+use crate::company::{
+    CompanyResponse,
+    CreateCompanyParams,
+    CreateCompanyRequest,
+    FindCompaniesParams,
+};
 
 pub async fn find_companies(
     params: FindCompaniesParams,
@@ -54,6 +58,7 @@ pub async fn find_companies(
         terms.push("RETURN x");
         let q = terms.join(" ");
 
+        // don't use HashMap for query binding, in order to avoid panick of tokio worker thread
         let aql = AqlQuery::builder()
             .query(q.as_str())
             .build();
@@ -70,8 +75,46 @@ pub async fn show_company(
         let conn: DbConn = pool.get().unwrap();
         let db: Database<ReqwestClient> = conn.db(&db_database()).unwrap();
         let collection: Collection<ReqwestClient> = db.collection("companies").unwrap();
-        let res: Document<CompanyResponse> = collection.document(key.as_ref()).unwrap();
-        let record: CompanyResponse = res.document;
+        let result: Document<CompanyResponse> = collection.document(key.as_ref()).unwrap();
+        let record: CompanyResponse = result.document;
         Ok(warp::reply::json(&record))
+    }).await.expect("Task panicked")
+}
+
+pub async fn create_company(
+    params: CreateCompanyParams,
+    pool: DbPool,
+) -> Result<impl warp::Reply, Infallible> {
+    tokio::task::spawn_blocking(move || {
+        let conn: DbConn = pool.get().unwrap();
+        let db: Database<ReqwestClient> = conn.db(&db_database()).unwrap();
+        let collection: Collection<ReqwestClient> = db.collection("companies").unwrap();
+        let now = Utc::now();
+
+        let req = CreateCompanyRequest {
+            name: params.name.unwrap().clone(),
+            since: params.since.unwrap(),
+            created_at: now,
+            modified_at: now,
+        };
+        let options: InsertOptions = InsertOptions::builder()
+            .return_new(true)
+            .build();
+        let result: DocumentResponse<Document<CreateCompanyRequest>> = collection.create_document(Document::new(req), options).unwrap();
+
+        let doc: &CreateCompanyRequest = result.new_doc().unwrap();
+        let record: CreateCompanyRequest = doc.clone();
+        let header = result.header().unwrap();
+        let response = CompanyResponse {
+            _id: header._id.clone(),
+            _key: header._key.clone(),
+            _rev: header._rev.clone(),
+            name: record.name,
+            since: record.since,
+            created_at: record.created_at,
+            modified_at: record.modified_at,
+            deleted_at: None,
+        };
+        Ok(warp::reply::json(&response))
     }).await.expect("Task panicked")
 }

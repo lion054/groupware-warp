@@ -8,7 +8,8 @@ pub fn init(
     pool: DbPool,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     find_companies(pool.clone())
-        .or(show_company(pool))
+        .or(show_company(pool.clone()))
+        .or(create_company(pool))
 }
 
 /// GET /companies
@@ -16,6 +17,7 @@ fn find_companies(
     pool: DbPool,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("companies")
+        .and(warp::get())
         .and(warp::query::<company::FindCompaniesParams>())
         .and(with_db(pool))
         .and_then(company::find_companies)
@@ -26,8 +28,20 @@ fn show_company(
     pool: DbPool,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("companies" / String)
+        .and(warp::get())
         .and(with_db(pool))
         .and_then(company::show_company)
+}
+
+/// POST /companies
+fn create_company(
+    pool: DbPool,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    warp::path!("companies")
+        .and(warp::post())
+        .and(create_params())
+        .and(with_db(pool))
+        .and_then(company::create_company)
 }
 
 fn with_db(
@@ -36,6 +50,6 @@ fn with_db(
     warp::any().map(move || pool.clone())
 }
 
-fn json_body() -> impl Filter<Extract = (company::CompanyResponse, ), Error = warp::Rejection> + Clone {
+fn create_params() -> impl Filter<Extract = (company::CreateCompanyParams, ), Error = warp::Rejection> + Clone {
     warp::body::content_length_limit(1024 * 16).and(warp::body::json())
 }

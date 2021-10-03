@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "(Windows) Launch program",
+            "name": "(Windows) Launch debug",
             "type": "cppvsdbg", // This is VS Code Extension
             "request": "launch",
             "program": "${workspaceRoot}/target/debug/groupware-warp.exe",
@@ -14,7 +14,23 @@
             "cwd": "${workspaceFolder}",
             "environment": [],
             "console": "externalTerminal",
-            "preLaunchTask": "cargo build",
+            "preLaunchTask": "cargo debug",
+            "sourceFileMap": {
+                "/rustc/5e1a799842ba6ed4a57e91f7ab9435947482f7d8": "${env:USERPROFILE}/.rustup/toolchains/stable-x86_64-pc-windows-msvc/lib/rustlib/src/rust"
+            },
+            "symbolSearchPath": "https://msdl.microsoft.com/download/symbols"
+        },
+        {
+            "name": "(Windows) Launch release",
+            "type": "cppvsdbg", // This is VS Code Extension
+            "request": "launch",
+            "program": "${workspaceRoot}/target/release/groupware-warp.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "console": "externalTerminal",
+            "preLaunchTask": "cargo release",
             "sourceFileMap": {
                 "/rustc/5e1a799842ba6ed4a57e91f7ab9435947482f7d8": "${env:USERPROFILE}/.rustup/toolchains/stable-x86_64-pc-windows-msvc/lib/rustlib/src/rust"
             },
@@ -32,7 +48,7 @@
             "cwd": "${workspaceFolder}",
             "environment": [],
             "console": "externalTerminal",
-            "preLaunchTask": "cargo build",
+            "preLaunchTask": "cargo debug",
             "sourceFileMap": {
                 "/rustc/5e1a799842ba6ed4a57e91f7ab9435947482f7d8": "${env:USERPROFILE}/.rustup/toolchains/stable-x86_64-pc-windows-msvc/lib/rustlib/src/rust"
             },

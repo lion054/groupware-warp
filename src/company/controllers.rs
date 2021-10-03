@@ -61,3 +61,17 @@ pub async fn find_companies(
         Ok(warp::reply::json(&records))
     }).await.expect("Task panicked")
 }
+
+pub async fn show_company(
+    key: String,
+    pool: DbPool,
+) -> Result<impl warp::Reply, Infallible> {
+    tokio::task::spawn_blocking(move || {
+        let conn: DbConn = pool.get().unwrap();
+        let db: Database<ReqwestClient> = conn.db(&db_database()).unwrap();
+        let collection: Collection<ReqwestClient> = db.collection("companies").unwrap();
+        let res: Document<CompanyResponse> = collection.document(key.as_ref()).unwrap();
+        let record: CompanyResponse = res.document;
+        Ok(warp::reply::json(&record))
+    }).await.expect("Task panicked")
+}

@@ -7,7 +7,8 @@ use crate::company;
 pub fn init(
     pool: DbPool,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    find_companies(pool)
+    find_companies(pool.clone())
+        .or(show_company(pool))
 }
 
 /// GET /companies
@@ -18,6 +19,15 @@ fn find_companies(
         .and(warp::query::<company::FindCompaniesParams>())
         .and(with_db(pool))
         .and_then(company::find_companies)
+}
+
+/// GET /companies/:key
+fn show_company(
+    pool: DbPool,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    warp::path!("companies" / String)
+        .and(with_db(pool))
+        .and_then(company::show_company)
 }
 
 fn with_db(

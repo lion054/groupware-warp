@@ -1,5 +1,5 @@
 use dotenv::dotenv;
-use warp::{self, Filter};
+use warp::{http::Method, Filter};
 
 mod config;
 mod database;
@@ -11,8 +11,13 @@ async fn main() {
     println!("Hello, world!");
     dotenv().ok();
 
+    let cors = warp::cors()
+        .allow_any_origin()
+        .allow_header("Content-Type")
+        .allow_methods(&[Method::GET, Method::POST, Method::PUT, Method::DELETE]);
+
     let pool = database::init_pool().expect("Failed to create pool");
-    let routes = api_filters(pool);
+    let routes = api_filters(pool).with(cors);
 
     warp::serve(routes)
         .run(([127, 0, 0, 1], 8080))

@@ -5,18 +5,24 @@ use arangors::{
     },
     AqlQuery, Collection, Database, Document,
 };
+use bytes::Buf;
 use chrono::prelude::*;
-use serde_json::{Value, to_value};
+use serde_json::{Deserializer, Value, to_value};
 use std::{
     convert::Infallible,
+    io,
     vec::Vec,
 };
 use tokio;
 use uclient::reqwest::ReqwestClient;
-use warp;
+use warp::{
+    self,
+    http::StatusCode,
+};
 
 use crate::config::db_database;
 use crate::database::{DbConn, DbPool};
+use crate::utils::AppError;
 use crate::company::{
     CompanyResponse,
     CreateCompanyParams,
@@ -25,9 +31,19 @@ use crate::company::{
 };
 
 pub async fn find_companies(
-    params: FindCompaniesParams,
+    req: String,
     pool: DbPool,
-) -> Result<impl warp::Reply, Infallible> {
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let params: FindCompaniesParams = serde_qs::from_str(req.as_str())
+        .map_err(|e| warp::reject::custom(
+            AppError::ParsingError(e.to_string())
+        ))
+        .unwrap();
+    // let des = &mut Deserializer::from_reader(buf.reader());
+    // let params: FindCompaniesParams = serde_path_to_error::deserialize(des)
+    //     .map_err(|e| warp::reject::custom(
+    //         AppError::ParsingError(e.to_string())
+    //     ))?;
     tokio::task::spawn_blocking(move || {
         let conn: DbConn = pool.get().unwrap();
         let db: Database<ReqwestClient> = conn.db(&db_database()).unwrap();
@@ -115,6 +131,9 @@ pub async fn create_company(
             modified_at: record.modified_at,
             deleted_at: None,
         };
-        Ok(warp::reply::json(&response))
+        Ok(warp::reply::with_status(
+            warp::reply::json(&response),
+            StatusCode::OK,
+        ))
     }).await.expect("Task panicked")
 }

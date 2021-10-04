@@ -3,6 +3,7 @@ use warp::{http::Method, Filter};
 
 mod config;
 mod database;
+mod utils;
 mod company;
 mod user;
 
@@ -31,5 +32,6 @@ fn api_filters(
         .and(
             company::init(pool.clone())
                 .or(user::init(pool))
+                .recover(utils::handle_rejection)
         )
 }

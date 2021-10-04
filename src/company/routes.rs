@@ -18,7 +18,7 @@ fn find_companies(
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("companies")
         .and(warp::get())
-        .and(warp::query::<company::FindCompaniesParams>())
+        .and(warp::query::raw())
         .and(with_db(pool))
         .and_then(company::find_companies)
 }
@@ -39,7 +39,7 @@ fn create_company(
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("companies")
         .and(warp::post())
-        .and(create_params())
+        .and(warp::body::json())
         .and(with_db(pool))
         .and_then(company::create_company)
 }
@@ -48,8 +48,4 @@ fn with_db(
     pool: DbPool,
 ) -> impl Filter<Extract = (DbPool, ), Error = Infallible> + Clone {
     warp::any().map(move || pool.clone())
-}
-
-fn create_params() -> impl Filter<Extract = (company::CreateCompanyParams, ), Error = warp::Rejection> + Clone {
-    warp::body::content_length_limit(1024 * 16).and(warp::body::json())
 }

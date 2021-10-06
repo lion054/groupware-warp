@@ -5,9 +5,7 @@ use arangors::{
     },
     AqlQuery, Collection, Database, Document,
 };
-use bytes::Buf;
 use chrono::prelude::*;
-use serde_json::Deserializer;
 use std::{
     convert::Infallible,
     io,
@@ -15,7 +13,6 @@ use std::{
 };
 use tokio;
 use uclient::reqwest::ReqwestClient;
-use validator::Validate;
 use warp::{
     self,
     http::StatusCode,
@@ -23,7 +20,6 @@ use warp::{
 
 use crate::config::db_database;
 use crate::database::{DbConn, DbPool};
-use crate::utils::AppError;
 use crate::company::{
     CompanyResponse,
     CreateCompanyParams,
@@ -89,18 +85,9 @@ pub async fn show_company(
 }
 
 pub async fn create_company(
-    buf: impl Buf,
+    params: CreateCompanyParams,
     pool: DbPool,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let deserializer = &mut Deserializer::from_reader(buf.reader());
-    let params: CreateCompanyParams = serde_path_to_error::deserialize(deserializer)
-        .map_err(|e| warp::reject::custom(
-            AppError::ParsingError(e.to_string())
-        ))?;
-    params.validate()
-        .map_err(|e| warp::reject::custom(
-            AppError::ValidationError(e)
-        ))?;
     tokio::task::spawn_blocking(move || {
         let conn: DbConn = pool.get().unwrap();
         let db: Database<ReqwestClient> = conn.db(&db_database()).unwrap();

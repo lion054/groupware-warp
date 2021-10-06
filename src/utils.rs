@@ -13,7 +13,7 @@ use warp::{
 #[derive(Error, Debug)]
 pub enum AppError {
     #[error("{0}")]
-    ParsingError(String),
+    ParsingError(String, String),
     #[error("validation error: {0}")]
     ValidationError(ValidationErrors),
 }
@@ -25,13 +25,13 @@ struct ErrorResponse {
     success: bool,
     message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    fields: Option<Vec<FieldError>>,
+    errors: Option<Vec<FieldError>>,
 }
 
 #[derive(Serialize)]
 struct FieldError {
-    name: String,
-    errors: Vec<String>,
+    field: String,
+    messages: Vec<String>,
 }
 
 pub async fn handle_rejection(
@@ -40,7 +40,7 @@ pub async fn handle_rejection(
     let (
         code,
         message,
-        fields,
+        errors,
     ): (
         StatusCode,
         String,
@@ -51,11 +51,10 @@ pub async fn handle_rejection(
         (StatusCode::FORBIDDEN, e.to_string(), None)
     } else if let Some(e) = r.find::<AppError>() {
         match e {
-            AppError::ParsingError(text) => {
-                let pieces: Vec<&str> = text.as_str().split(": ").collect();
+            AppError::ParsingError(field, msg) => {
                 let errors: Vec<FieldError> = vec![FieldError {
-                    name: pieces[0].to_string(),
-                    errors: vec![pieces[1].to_string()],
+                    field: field.clone(),
+                    messages: vec![msg.clone()],
                 }];
                 (StatusCode::BAD_REQUEST, "Parsing errors".to_string(), Some(errors))
             },
@@ -64,8 +63,8 @@ pub async fn handle_rejection(
                     .errors()
                     .iter()
                     .map(|error_kind| FieldError {
-                        name: error_kind.0.to_string(),
-                        errors: match error_kind.1 {
+                        field: error_kind.0.to_string(),
+                        messages: match error_kind.1 {
                             ValidationErrorsKind::Struct(struct_err) => {
                                 validation_errs_to_str_vec(struct_err)
                             },
@@ -95,7 +94,7 @@ pub async fn handle_rejection(
     let json = warp::reply::json(&ErrorResponse {
         success: false,
         message: message.into(),
-        fields,
+        errors,
     });
 
     Ok(warp::reply::with_status(json, code))

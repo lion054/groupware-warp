@@ -1,3 +1,5 @@
+use bytes::Buf;
+use serde_json::Deserializer;
 use std::{
     collections::HashMap,
     convert::Infallible,
@@ -7,7 +9,7 @@ use warp::{self, Filter};
 
 use crate::database::DbPool;
 use crate::utils::AppError;
-use crate::company::{self, FindCompaniesParams};
+use crate::company::{self, CreateCompanyParams, FindCompaniesParams};
 
 pub fn init(
     pool: DbPool,
@@ -44,7 +46,7 @@ fn create_company(
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("companies")
         .and(warp::post())
-        .and(warp::body::aggregate())
+        .and(with_create_params())
         .and(with_db(pool))
         .and_then(company::create_company)
 }
@@ -70,9 +72,8 @@ fn with_find_params() -> impl Filter<Extract = (FindCompaniesParams, ), Error = 
             let limit = match map.get("limit").unwrap().parse::<u32>() {
                 Ok(r) => r,
                 Err(e) => {
-                    let code = format!("limit: {}", e.to_string());
                     return Err(warp::reject::custom(
-                        AppError::ParsingError(code)
+                        AppError::ParsingError("limit".to_string(), e.to_string())
                     ));
                 },
             };
@@ -88,4 +89,32 @@ fn with_find_params() -> impl Filter<Extract = (FindCompaniesParams, ), Error = 
         }
         Ok(params)
     })
+}
+
+fn with_create_params() -> impl Filter<Extract = (CreateCompanyParams, ), Error = warp::Rejection> + Clone {
+    warp::body::aggregate().and_then(validate_create_params)
+}
+
+async fn validate_create_params(
+    buf: impl Buf,
+) -> Result<CreateCompanyParams, warp::Rejection> {
+    let deserializer = &mut Deserializer::from_reader(buf.reader());
+    let params: CreateCompanyParams = match serde_path_to_error::deserialize(deserializer) {
+        Ok(r) => r,
+        Err(e) => {
+            let pieces: Vec<String> = e.to_string().as_str().split(": ").map(String::from).collect();
+            return Err(warp::reject::custom(
+                AppError::ParsingError(pieces[0].clone(), pieces[1].clone())
+            ));
+        },
+    };
+    match params.validate() {
+        Ok(_) => (),
+        Err(e) => {
+            return Err(warp::reject::custom(
+                AppError::ValidationError(e)
+            ));
+        },
+    }
+    Ok(params)
 }

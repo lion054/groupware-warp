@@ -18,7 +18,7 @@ use warp::{
     http::StatusCode,
 };
 
-use crate::helpers::JsonResponse;
+use crate::helpers::JsonResult;
 use crate::company::{
     CompanyResponse,
     CreateCompanyParams,
@@ -168,7 +168,7 @@ pub async fn delete_company(
     db: Database<ReqwestClient>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     tokio::task::spawn_blocking(move || {
-        let response: JsonResponse = match params.mode.as_str() {
+        match params.mode.as_str() {
             "erase" => erase_company(key, db),
             "trash" => trash_company(key, db),
             "restore" => restore_company(key, db),
@@ -179,15 +179,14 @@ pub async fn delete_company(
                     StatusCode::NO_CONTENT,
                 ))
             },
-        };
-        return response;
+        }
     }).await.expect("Task panicked")
 }
 
 fn erase_company(
     key: String,
     db: Database<ReqwestClient>,
-) -> JsonResponse {
+) -> JsonResult { // don't use opaque type to avoid compile error
     let collection: Collection<ReqwestClient> = db.collection("companies").unwrap();
     let options: RemoveOptions = RemoveOptions::builder()
         .return_old(true)
@@ -215,7 +214,7 @@ fn erase_company(
 fn trash_company(
     key: String,
     db: Database<ReqwestClient>,
-) -> JsonResponse {
+) -> JsonResult { // don't use opaque type to avoid compile error
     let collection: Collection<ReqwestClient> = db.collection("companies").unwrap();
     let obj = serde_json::json!({
         "deleted_at": Utc::now(),
@@ -249,12 +248,12 @@ fn trash_company(
 fn restore_company(
     key: String,
     db: Database<ReqwestClient>,
-) -> JsonResponse {
+) -> JsonResult { // don't use opaque type to avoid compile error
     let collection: Collection<ReqwestClient> = db.collection("companies").unwrap();
     let data: UpdateCompanyRequest = serde_json::from_str::<UpdateCompanyRequest>("{\"deleted_at\":null}").unwrap();
     let options: UpdateOptions = UpdateOptions::builder()
         .return_new(true)
-        .return_old(true)
+        .return_old(false)
         .keep_null(false)
         .build();
     let res: DocumentResponse<Document<UpdateCompanyRequest>> = collection.update_document(&key, Document::new(data), options).unwrap();

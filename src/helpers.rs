@@ -4,4 +4,4 @@ use warp::{
     reply::{Json, WithStatus},
 };
 
-pub type JsonResponse = Result<WithStatus<Json>, Rejection>;
+pub type JsonResult = Result<WithStatus<Json>, Rejection>;

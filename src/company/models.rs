@@ -60,6 +60,21 @@ pub struct UpdateCompanyRequest {
     pub deleted_at: Option<DateTime<Utc>>,
 }
 
+// delete
+
+#[derive(Debug, Validate, Deserialize)]
+pub struct DeleteCompanyParams {
+    #[validate(custom = "validate_mode")]
+    pub mode: String,
+}
+
+fn validate_mode(mode: &str) -> Result<(), ValidationError> {
+    match mode {
+        "erase" | "trash" | "restore" => Ok(()),
+        _ => Err(ValidationError::new("Wrong mode")),
+    }
+}
+
 // response
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -4,6 +4,7 @@ use warp::{http::Method, Filter};
 mod config;
 mod database;
 mod error_handler;
+mod helpers;
 mod company;
 mod user;
 

@@ -11,14 +11,14 @@ use warp::{
 };
 
 #[derive(Error, Debug)]
-pub enum AppError {
+pub enum ApiError {
     #[error("{0}")]
     ParsingError(String, String),
     #[error("validation error: {0}")]
     ValidationError(ValidationErrors),
 }
 
-impl warp::reject::Reject for AppError {}
+impl warp::reject::Reject for ApiError {}
 
 #[derive(Serialize)]
 struct ErrorResponse {
@@ -49,16 +49,16 @@ pub async fn handle_rejection(
         (StatusCode::NOT_FOUND, "Not found".to_string(), None)
     } else if let Some(e) = r.find::<CorsForbidden>() {
         (StatusCode::FORBIDDEN, e.to_string(), None)
-    } else if let Some(e) = r.find::<AppError>() {
+    } else if let Some(e) = r.find::<ApiError>() {
         match e {
-            AppError::ParsingError(field, msg) => {
+            ApiError::ParsingError(field, msg) => {
                 let errors: Vec<FieldError> = vec![FieldError {
                     field: field.clone(),
                     messages: vec![msg.clone()],
                 }];
                 (StatusCode::BAD_REQUEST, "Parsing errors".to_string(), Some(errors))
             },
-            AppError::ValidationError(val_errs) => {
+            ApiError::ValidationError(val_errs) => {
                 let errors: Vec<FieldError> = val_errs
                     .errors()
                     .iter()

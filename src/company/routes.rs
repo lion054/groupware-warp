@@ -11,10 +11,11 @@ use warp::Filter;
 
 use crate::config::db_database;
 use crate::database::{DbConn, DbPool};
-use crate::error_handler::AppError;
+use crate::error_handler::ApiError;
 use crate::company::{
     self,
     CreateCompanyParams,
+    DeleteCompanyParams,
     FindCompaniesParams,
     UpdateCompanyParams,
 };
@@ -25,7 +26,8 @@ pub fn init(
     find_companies(pool.clone())
         .or(show_company(pool.clone()))
         .or(create_company(pool.clone()))
-        .or(update_company(pool))
+        .or(update_company(pool.clone()))
+        .or(delete_company(pool))
 }
 
 /// GET /companies
@@ -71,6 +73,17 @@ fn update_company(
         .and_then(company::update_company)
 }
 
+/// DELETE /companies/:key
+fn delete_company(
+    pool: DbPool,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    warp::path!("companies" / String)
+        .and(warp::delete())
+        .and(with_delete_params())
+        .and(with_db(pool))
+        .and_then(company::delete_company)
+}
+
 fn with_db(
     pool: DbPool,
 ) -> impl Filter<Extract = (Database<ReqwestClient>, ), Error = Infallible> + Clone {
@@ -96,7 +109,7 @@ fn with_find_params() -> impl Filter<Extract = (FindCompaniesParams, ), Error = 
                 Ok(r) => r,
                 Err(e) => {
                     return Err(warp::reject::custom(
-                        AppError::ParsingError("limit".to_string(), e.to_string())
+                        ApiError::ParsingError("limit".to_string(), e.to_string())
                     ));
                 },
             };
@@ -106,7 +119,7 @@ fn with_find_params() -> impl Filter<Extract = (FindCompaniesParams, ), Error = 
             Ok(_) => (),
             Err(e) => {
                 return Err(warp::reject::custom(
-                    AppError::ValidationError(e)
+                    ApiError::ValidationError(e)
                 ));
             },
         }
@@ -127,7 +140,7 @@ async fn validate_create_params(
         Err(e) => {
             let pieces: Vec<String> = e.to_string().as_str().split(": ").map(String::from).collect();
             return Err(warp::reject::custom(
-                AppError::ParsingError(pieces[0].clone(), pieces[1].clone())
+                ApiError::ParsingError(pieces[0].clone(), pieces[1].clone())
             ));
         },
     };
@@ -135,7 +148,7 @@ async fn validate_create_params(
         Ok(_) => (),
         Err(e) => {
             return Err(warp::reject::custom(
-                AppError::ValidationError(e)
+                ApiError::ValidationError(e)
             ));
         },
     }
@@ -155,7 +168,7 @@ async fn validate_update_params(
         Err(e) => {
             let pieces: Vec<String> = e.to_string().as_str().split(": ").map(String::from).collect();
             return Err(warp::reject::custom(
-                AppError::ParsingError(pieces[0].clone(), pieces[1].clone())
+                ApiError::ParsingError(pieces[0].clone(), pieces[1].clone())
             ));
         },
     };
@@ -163,7 +176,35 @@ async fn validate_update_params(
         Ok(_) => (),
         Err(e) => {
             return Err(warp::reject::custom(
-                AppError::ValidationError(e)
+                ApiError::ValidationError(e)
+            ));
+        },
+    }
+    Ok(params)
+}
+
+fn with_delete_params() -> impl Filter<Extract = (DeleteCompanyParams, ), Error = warp::Rejection> + Clone {
+    warp::body::aggregate().and_then(validate_delete_params)
+}
+
+async fn validate_delete_params(
+    buf: impl Buf,
+) -> Result<DeleteCompanyParams, warp::Rejection> {
+    let deserializer = &mut Deserializer::from_reader(buf.reader());
+    let params: DeleteCompanyParams = match serde_path_to_error::deserialize(deserializer) {
+        Ok(r) => r,
+        Err(e) => {
+            let pieces: Vec<String> = e.to_string().as_str().split(": ").map(String::from).collect();
+            return Err(warp::reject::custom(
+                ApiError::ParsingError(pieces[0].clone(), pieces[1].clone())
+            ));
+        },
+    };
+    match params.validate() {
+        Ok(_) => (),
+        Err(e) => {
+            return Err(warp::reject::custom(
+                ApiError::ValidationError(e)
             ));
         },
     }

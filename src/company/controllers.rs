@@ -9,7 +9,6 @@ use chrono::prelude::*;
 use serde_json::Value;
 use std::{
     convert::Infallible,
-    io,
     vec::Vec,
 };
 use tokio;
@@ -19,10 +18,12 @@ use warp::{
     http::StatusCode,
 };
 
+use crate::helpers::JsonResponse;
 use crate::company::{
     CompanyResponse,
     CreateCompanyParams,
     CreateCompanyRequest,
+    DeleteCompanyParams,
     FindCompaniesParams,
     UpdateCompanyParams,
     UpdateCompanyRequest,
@@ -114,7 +115,7 @@ pub async fn create_company(
         };
         Ok(warp::reply::with_status(
             warp::reply::json(&response),
-            StatusCode::OK,
+            StatusCode::CREATED,
         ))
     }).await.expect("Task panicked")
 }
@@ -159,4 +160,119 @@ pub async fn update_company(
             StatusCode::OK,
         ))
     }).await.expect("Task panicked")
+}
+
+pub async fn delete_company(
+    key: String,
+    params: DeleteCompanyParams,
+    db: Database<ReqwestClient>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    tokio::task::spawn_blocking(move || {
+        let response: JsonResponse = match params.mode.as_str() {
+            "erase" => erase_company(key, db),
+            "trash" => trash_company(key, db),
+            "restore" => restore_company(key, db),
+            &_ => {
+                let invalid_response: Vec<CompanyResponse> = vec![];
+                Ok(warp::reply::with_status(
+                    warp::reply::json(&invalid_response),
+                    StatusCode::NO_CONTENT,
+                ))
+            },
+        };
+        return response;
+    }).await.expect("Task panicked")
+}
+
+fn erase_company(
+    key: String,
+    db: Database<ReqwestClient>,
+) -> JsonResponse {
+    let collection: Collection<ReqwestClient> = db.collection("companies").unwrap();
+    let options: RemoveOptions = RemoveOptions::builder()
+        .return_old(true)
+        .build();
+    let res: DocumentResponse<Document<UpdateCompanyRequest>> = collection.remove_document(&key, options, None).unwrap();
+    let doc: &UpdateCompanyRequest = res.old_doc().unwrap();
+    let record: UpdateCompanyRequest = doc.clone();
+    let header = res.header().unwrap();
+    let response = CompanyResponse {
+        _id: header._id.clone(),
+        _key: header._key.clone(),
+        _rev: header._rev.clone(),
+        name: record.name.unwrap(),
+        since: record.since.unwrap(),
+        created_at: record.created_at.unwrap(),
+        modified_at: record.modified_at.unwrap(),
+        deleted_at: record.deleted_at,
+    };
+    Ok(warp::reply::with_status(
+        warp::reply::json(&response),
+        StatusCode::NO_CONTENT,
+    ))
+}
+
+fn trash_company(
+    key: String,
+    db: Database<ReqwestClient>,
+) -> JsonResponse {
+    let collection: Collection<ReqwestClient> = db.collection("companies").unwrap();
+    let obj = serde_json::json!({
+        "deleted_at": Utc::now(),
+    });
+    let text = serde_json::to_string(&obj).unwrap();
+    let data: UpdateCompanyRequest = serde_json::from_str::<UpdateCompanyRequest>(&text).unwrap();
+    let options: UpdateOptions = UpdateOptions::builder()
+        .return_new(true)
+        .return_old(true)
+        .build();
+    let res: DocumentResponse<Document<UpdateCompanyRequest>> = collection.update_document(&key, Document::new(data), options).unwrap();
+    let doc: &UpdateCompanyRequest = res.new_doc().unwrap();
+    let record: UpdateCompanyRequest = doc.clone();
+    let header = res.header().unwrap();
+    let response = CompanyResponse {
+        _id: header._id.clone(),
+        _key: header._key.clone(),
+        _rev: header._rev.clone(),
+        name: record.name.unwrap(),
+        since: record.since.unwrap(),
+        created_at: record.created_at.unwrap(),
+        modified_at: record.modified_at.unwrap(),
+        deleted_at: record.deleted_at,
+    };
+    Ok(warp::reply::with_status(
+        warp::reply::json(&response),
+        StatusCode::OK,
+    ))
+}
+
+fn restore_company(
+    key: String,
+    db: Database<ReqwestClient>,
+) -> JsonResponse {
+    let collection: Collection<ReqwestClient> = db.collection("companies").unwrap();
+    let data: UpdateCompanyRequest = serde_json::from_str::<UpdateCompanyRequest>("{\"deleted_at\":null}").unwrap();
+    let options: UpdateOptions = UpdateOptions::builder()
+        .return_new(true)
+        .return_old(true)
+        .keep_null(false)
+        .build();
+    let res: DocumentResponse<Document<UpdateCompanyRequest>> = collection.update_document(&key, Document::new(data), options).unwrap();
+    let doc: &UpdateCompanyRequest = res.new_doc().unwrap();
+    let record: UpdateCompanyRequest = doc.clone();
+    let header = res.header().unwrap();
+    let response = CompanyResponse {
+        _id: header._id.clone(),
+        _key: header._key.clone(),
+        _rev: header._rev.clone(),
+        name: record.name.unwrap(),
+        since: record.since.unwrap(),
+        created_at: record.created_at.unwrap(),
+        modified_at: record.modified_at.unwrap(),
+        deleted_at: record.deleted_at,
+    };
+    Ok(warp::reply::with_status(
+        warp::reply::json(&response),
+        StatusCode::OK,
+    ))
 }

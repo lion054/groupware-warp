@@ -1,8 +1,8 @@
 use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
-use validator::{Validate, ValidationError, ValidationErrors};
+use validator::{Validate, ValidationError};
 
-#[derive(Validate, Deserialize)]
+#[derive(Default, Validate, Deserialize)]
 pub struct FindCompaniesParams {
     pub search: Option<String>,
     #[validate(custom = "validate_sort_by")]
@@ -14,7 +14,7 @@ pub struct FindCompaniesParams {
 fn validate_sort_by(sort_by: &str) -> Result<(), ValidationError> {
     match sort_by {
         "name" | "since" => Ok(()),
-        _ => Err(ValidationError::new("Wrong sort_by")),
+        _ => Err(ValidationError::new("Must be one of name and since")),
     }
 }
 

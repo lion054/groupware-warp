@@ -25,7 +25,3 @@ fn with_db(
 ) -> impl Filter<Extract = (DbPool, ), Error = Infallible> + Clone {
     warp::any().map(move || pool.clone())
 }
-
-fn json_body() -> impl Filter<Extract = (user::UserResponse, ), Error = warp::Rejection> + Clone {
-    warp::body::content_length_limit(1024 * 16).and(warp::body::json())
-}

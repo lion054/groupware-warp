@@ -7,7 +7,7 @@ use arangors::{
 };
 use bytes::Buf;
 use chrono::prelude::*;
-use serde_json::{Deserializer, Value, to_value};
+use serde_json::Deserializer;
 use std::{
     convert::Infallible,
     io,
@@ -15,6 +15,7 @@ use std::{
 };
 use tokio;
 use uclient::reqwest::ReqwestClient;
+use validator::Validate;
 use warp::{
     self,
     http::StatusCode,
@@ -31,19 +32,9 @@ use crate::company::{
 };
 
 pub async fn find_companies(
-    req: String,
+    params: FindCompaniesParams,
     pool: DbPool,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let params: FindCompaniesParams = serde_qs::from_str(req.as_str())
-        .map_err(|e| warp::reject::custom(
-            AppError::ParsingError(e.to_string())
-        ))
-        .unwrap();
-    // let des = &mut Deserializer::from_reader(buf.reader());
-    // let params: FindCompaniesParams = serde_path_to_error::deserialize(des)
-    //     .map_err(|e| warp::reject::custom(
-    //         AppError::ParsingError(e.to_string())
-    //     ))?;
     tokio::task::spawn_blocking(move || {
         let conn: DbConn = pool.get().unwrap();
         let db: Database<ReqwestClient> = conn.db(&db_database()).unwrap();
@@ -98,9 +89,18 @@ pub async fn show_company(
 }
 
 pub async fn create_company(
-    params: CreateCompanyParams,
+    buf: impl Buf,
     pool: DbPool,
-) -> Result<impl warp::Reply, Infallible> {
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let deserializer = &mut Deserializer::from_reader(buf.reader());
+    let params: CreateCompanyParams = serde_path_to_error::deserialize(deserializer)
+        .map_err(|e| warp::reject::custom(
+            AppError::ParsingError(e.to_string())
+        ))?;
+    params.validate()
+        .map_err(|e| warp::reject::custom(
+            AppError::ValidationError(e)
+        ))?;
     tokio::task::spawn_blocking(move || {
         let conn: DbConn = pool.get().unwrap();
         let db: Database<ReqwestClient> = conn.db(&db_database()).unwrap();

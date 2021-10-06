@@ -86,7 +86,7 @@ pub async fn handle_rejection(
             },
         }
     } else if let Some(e) = r.find::<warp::body::BodyDeserializeError>() {
-        (StatusCode::BAD_REQUEST, "Bad request for deserialization".to_string(), None)
+        (StatusCode::BAD_REQUEST, e.to_string(), None)
     } else {
         (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string(), None)
     };

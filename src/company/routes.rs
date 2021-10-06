@@ -8,7 +8,7 @@ use validator::Validate;
 use warp::{self, Filter};
 
 use crate::database::DbPool;
-use crate::utils::AppError;
+use crate::error_handler::AppError;
 use crate::company::{self, CreateCompanyParams, FindCompaniesParams};
 
 pub fn init(

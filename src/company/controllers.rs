@@ -19,8 +19,6 @@ use warp::{
     http::StatusCode,
 };
 
-use crate::config::db_database;
-use crate::database::{DbConn, DbPool};
 use crate::company::{
     CompanyResponse,
     CreateCompanyParams,
@@ -32,12 +30,9 @@ use crate::company::{
 
 pub async fn find_companies(
     params: FindCompaniesParams,
-    pool: DbPool,
+    db: Database<ReqwestClient>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     tokio::task::spawn_blocking(move || {
-        let conn: DbConn = pool.get().unwrap();
-        let db: Database<ReqwestClient> = conn.db(&db_database()).unwrap();
-
         let mut terms = vec!["FOR x IN companies"];
         let search_term;
         let sort_by_term;
@@ -75,11 +70,9 @@ pub async fn find_companies(
 
 pub async fn show_company(
     key: String,
-    pool: DbPool,
+    db: Database<ReqwestClient>,
 ) -> Result<impl warp::Reply, Infallible> {
     tokio::task::spawn_blocking(move || {
-        let conn: DbConn = pool.get().unwrap();
-        let db: Database<ReqwestClient> = conn.db(&db_database()).unwrap();
         let collection: Collection<ReqwestClient> = db.collection("companies").unwrap();
         let result: Document<CompanyResponse> = collection.document(key.as_ref()).unwrap();
         let record: CompanyResponse = result.document;
@@ -89,11 +82,9 @@ pub async fn show_company(
 
 pub async fn create_company(
     params: CreateCompanyParams,
-    pool: DbPool,
+    db: Database<ReqwestClient>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     tokio::task::spawn_blocking(move || {
-        let conn: DbConn = pool.get().unwrap();
-        let db: Database<ReqwestClient> = conn.db(&db_database()).unwrap();
         let collection: Collection<ReqwestClient> = db.collection("companies").unwrap();
         let now = Utc::now();
 
@@ -131,11 +122,9 @@ pub async fn create_company(
 pub async fn update_company(
     key: String,
     params: UpdateCompanyParams,
-    pool: DbPool,
+    db: Database<ReqwestClient>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     tokio::task::spawn_blocking(move || {
-        let conn: DbConn = pool.get().unwrap();
-        let db: Database<ReqwestClient> = conn.db(&db_database()).unwrap();
         let collection: Collection<ReqwestClient> = db.collection("companies").unwrap();
         let obj: Value = serde_json::json!({
             "modified_at": Utc::now(),

@@ -9,14 +9,20 @@ use warp::{self, Filter};
 
 use crate::database::DbPool;
 use crate::error_handler::AppError;
-use crate::company::{self, CreateCompanyParams, FindCompaniesParams};
+use crate::company::{
+    self,
+    CreateCompanyParams,
+    FindCompaniesParams,
+    UpdateCompanyParams,
+};
 
 pub fn init(
     pool: DbPool,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     find_companies(pool.clone())
         .or(show_company(pool.clone()))
-        .or(create_company(pool))
+        .or(create_company(pool.clone()))
+        .or(update_company(pool))
 }
 
 /// GET /companies
@@ -49,6 +55,17 @@ fn create_company(
         .and(with_create_params())
         .and(with_db(pool))
         .and_then(company::create_company)
+}
+
+/// PUT /companies/:key
+fn update_company(
+    pool: DbPool,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    warp::path!("companies" / String)
+        .and(warp::put())
+        .and(with_update_params())
+        .and(with_db(pool))
+        .and_then(company::update_company)
 }
 
 fn with_db(
@@ -100,6 +117,34 @@ async fn validate_create_params(
 ) -> Result<CreateCompanyParams, warp::Rejection> {
     let deserializer = &mut Deserializer::from_reader(buf.reader());
     let params: CreateCompanyParams = match serde_path_to_error::deserialize(deserializer) {
+        Ok(r) => r,
+        Err(e) => {
+            let pieces: Vec<String> = e.to_string().as_str().split(": ").map(String::from).collect();
+            return Err(warp::reject::custom(
+                AppError::ParsingError(pieces[0].clone(), pieces[1].clone())
+            ));
+        },
+    };
+    match params.validate() {
+        Ok(_) => (),
+        Err(e) => {
+            return Err(warp::reject::custom(
+                AppError::ValidationError(e)
+            ));
+        },
+    }
+    Ok(params)
+}
+
+fn with_update_params() -> impl Filter<Extract = (UpdateCompanyParams, ), Error = warp::Rejection> + Clone {
+    warp::body::aggregate().and_then(validate_update_params)
+}
+
+async fn validate_update_params(
+    buf: impl Buf,
+) -> Result<UpdateCompanyParams, warp::Rejection> {
+    let deserializer = &mut Deserializer::from_reader(buf.reader());
+    let params: UpdateCompanyParams = match serde_path_to_error::deserialize(deserializer) {
         Ok(r) => r,
         Err(e) => {
             let pieces: Vec<String> = e.to_string().as_str().split(": ").map(String::from).collect();

@@ -2,6 +2,8 @@ use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
 
+// find
+
 #[derive(Default, Validate, Deserialize)]
 pub struct FindCompaniesParams {
     pub search: Option<String>,
@@ -18,6 +20,8 @@ fn validate_sort_by(sort_by: &str) -> Result<(), ValidationError> {
     }
 }
 
+// create
+
 #[derive(Clone, Debug, Default, Validate, Serialize, Deserialize)]
 pub struct CreateCompanyParams {
     #[validate(required)]
@@ -33,6 +37,30 @@ pub struct CreateCompanyRequest {
     pub created_at: DateTime<Utc>,
     pub modified_at: DateTime<Utc>,
 }
+
+// update
+
+#[derive(Clone, Debug, Default, Validate, Serialize, Deserialize)]
+pub struct UpdateCompanyParams {
+    pub name: Option<String>,
+    pub since: Option<DateTime<Utc>>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UpdateCompanyRequest {
+    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
+    pub since: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
+    pub created_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
+    pub modified_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
+    pub deleted_at: Option<DateTime<Utc>>,
+}
+
+// response
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CompanyResponse {

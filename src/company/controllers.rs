@@ -6,6 +6,7 @@ use arangors::{
     AqlQuery, Collection, Database, Document,
 };
 use chrono::prelude::*;
+use serde_json::Value;
 use std::{
     convert::Infallible,
     io,
@@ -25,6 +26,8 @@ use crate::company::{
     CreateCompanyParams,
     CreateCompanyRequest,
     FindCompaniesParams,
+    UpdateCompanyParams,
+    UpdateCompanyRequest,
 };
 
 pub async fn find_companies(
@@ -117,6 +120,50 @@ pub async fn create_company(
             created_at: record.created_at,
             modified_at: record.modified_at,
             deleted_at: None,
+        };
+        Ok(warp::reply::with_status(
+            warp::reply::json(&response),
+            StatusCode::OK,
+        ))
+    }).await.expect("Task panicked")
+}
+
+pub async fn update_company(
+    key: String,
+    params: UpdateCompanyParams,
+    pool: DbPool,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    tokio::task::spawn_blocking(move || {
+        let conn: DbConn = pool.get().unwrap();
+        let db: Database<ReqwestClient> = conn.db(&db_database()).unwrap();
+        let collection: Collection<ReqwestClient> = db.collection("companies").unwrap();
+        let obj: Value = serde_json::json!({
+            "modified_at": Utc::now(),
+        });
+        let text: String = serde_json::to_string(&obj).unwrap();
+        let mut data: UpdateCompanyRequest = serde_json::from_str::<UpdateCompanyRequest>(&text).unwrap();
+        if params.name.is_some() {
+            data.name = params.name.clone();
+        }
+        if params.since.is_some() {
+            data.since = params.since.clone();
+        }
+        let options: UpdateOptions = UpdateOptions::builder()
+            .return_new(true)
+            .return_old(true)
+            .build();
+        let res: DocumentResponse<Document<UpdateCompanyRequest>> = collection.update_document(&key, Document::new(data), options).unwrap();
+        let record: &UpdateCompanyRequest = res.new_doc().unwrap();
+        let header = res.header().unwrap();
+        let response = CompanyResponse {
+            _id: header._id.clone(),
+            _key: header._key.clone(),
+            _rev: header._rev.clone(),
+            name: record.name.clone().unwrap(),
+            since: record.since.unwrap(),
+            created_at: record.created_at.unwrap(),
+            modified_at: record.modified_at.unwrap(),
+            deleted_at: record.deleted_at,
         };
         Ok(warp::reply::with_status(
             warp::reply::json(&response),

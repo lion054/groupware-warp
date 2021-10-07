@@ -12,7 +12,8 @@ use crate::user::{
 pub fn init(
     pool: DbPool,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    find_users(pool)
+    find_users(pool.clone())
+        .or(show_user(pool))
 }
 
 /// GET /users
@@ -24,6 +25,16 @@ fn find_users(
         .and(with_find_request())
         .and(with_db(pool))
         .and_then(user::find_users)
+}
+
+/// GET /users/:key
+fn show_user(
+    pool: DbPool,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    warp::path!("users" / String)
+        .and(warp::get())
+        .and(with_db(pool))
+        .and_then(user::show_user)
 }
 
 // warp::query::raw can't hook rejection of InvalidQuery for incorrect data type

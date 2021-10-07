@@ -55,3 +55,15 @@ pub async fn find_users(
         Ok(warp::reply::json(&records))
     }).await.expect("Task panicked")
 }
+
+pub async fn show_user(
+    key: String,
+    db: Database<ReqwestClient>,
+) -> Result<impl warp::Reply, Infallible> {
+    tokio::task::spawn_blocking(move || {
+        let collection: Collection<ReqwestClient> = db.collection("users").unwrap();
+        let result: Document<UserResponse> = collection.document(key.as_ref()).unwrap();
+        let record: UserResponse = result.document;
+        Ok(warp::reply::json(&record))
+    }).await.expect("Task panicked")
+}

@@ -24,14 +24,14 @@ use crate::company::{
     CreateCompanyParams,
     CreateCompanyRequest,
     DeleteCompanyParams,
-    FindCompaniesParams,
+    FindCompaniesRequest,
     RestoreCompanyRequest,
     UpdateCompanyParams,
     UpdateCompanyRequest,
 };
 
 pub async fn find_companies(
-    params: FindCompaniesParams,
+    req: FindCompaniesRequest,
     db: Database<ReqwestClient>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     tokio::task::spawn_blocking(move || {
@@ -40,20 +40,20 @@ pub async fn find_companies(
         let sort_by_term;
         let limit_term;
 
-        if params.search.is_some() {
-            let search: String = params.search.unwrap().trim().to_string().clone();
+        if req.search.is_some() {
+            let search: String = req.search.unwrap().trim().to_string().clone();
             if !search.is_empty() {
                 search_term = format!("FILTER CONTAINS(x.name, '{}')", search);
                 terms.push(search_term.as_str());
             }
         }
-        if params.sort_by.is_some() {
-            let sort_by: String = params.sort_by.unwrap();
+        if req.sort_by.is_some() {
+            let sort_by: String = req.sort_by.unwrap();
             sort_by_term = format!("SORT x.{} ASC", sort_by);
             terms.push(sort_by_term.as_str());
         }
-        if params.limit.is_some() {
-            let limit: u32 = params.limit.unwrap();
+        if req.limit.is_some() {
+            let limit: u32 = req.limit.unwrap();
             limit_term = format!("LIMIT 0, {}", limit);
             terms.push(limit_term.as_str());
         }

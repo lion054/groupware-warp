@@ -5,20 +5,18 @@ use validator::{Validate, ValidationError};
 
 // find
 
-#[derive(Default, Validate, Deserialize)]
+#[derive(Default, Deserialize)]
 pub struct FindCompaniesParams {
     pub search: Option<String>,
-    #[validate(custom = "validate_sort_by")]
     pub sort_by: Option<String>,
-    #[validate(range(min = 1, max = 100))]
-    pub limit: Option<u32>,
+    pub limit: Option<String>,
 }
 
-fn validate_sort_by(sort_by: &str) -> Result<(), ValidationError> {
-    match sort_by {
-        "name" | "since" => Ok(()),
-        _ => Err(ValidationError::new("Must be one of name and since")),
-    }
+#[derive(Default)]
+pub struct FindCompaniesRequest {
+    pub search: Option<String>,
+    pub sort_by: Option<String>,
+    pub limit: Option<u32>,
 }
 
 // create

@@ -26,6 +26,10 @@ fn find_users(
         .and_then(user::find_users)
 }
 
+// warp::query::raw can't hook rejection of InvalidQuery for incorrect data type
+// so define FindUsersParams that contains string field
+// and define FindUsersRequest that contains number field
+// then convert FindUsersParams into FindUsersRequest
 fn with_find_request() -> impl Filter<Extract = (FindUsersRequest, ), Error = warp::Rejection> + Clone {
     warp::query::<FindUsersParams>().and_then(|params: FindUsersParams| async move {
         let mut req: FindUsersRequest = FindUsersRequest::default();

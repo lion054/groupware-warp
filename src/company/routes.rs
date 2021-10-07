@@ -79,6 +79,10 @@ fn delete_company(
         .and_then(company::delete_company)
 }
 
+// warp::query::raw can't hook rejection of InvalidQuery for incorrect data type
+// so define FindCompaniesParams that contains string field
+// and define FindCompaniesRequest that contains number field
+// then convert FindCompaniesParams into FindCompaniesRequest
 fn with_find_request() -> impl Filter<Extract = (FindCompaniesRequest, ), Error = warp::Rejection> + Clone {
     warp::query::<FindCompaniesParams>().and_then(|params: FindCompaniesParams| async move {
         let mut req: FindCompaniesRequest = FindCompaniesRequest::default();

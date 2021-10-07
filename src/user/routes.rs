@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-use validator::Validate;
 use warp::Filter;
 
 use crate::database::DbPool;
@@ -8,6 +6,7 @@ use crate::error_handler::ApiError;
 use crate::user::{
     self,
     FindUsersParams,
+    FindUsersRequest,
 };
 
 pub fn init(
@@ -22,24 +21,31 @@ fn find_users(
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("users")
         .and(warp::get())
-        .and(with_find_params())
+        .and(with_find_request())
         .and(with_db(pool))
         .and_then(user::find_users)
 }
 
-fn with_find_params() -> impl Filter<Extract = (FindUsersParams, ), Error = warp::Rejection> + Clone {
-    warp::query::raw().and_then(|qs: String| async move {
-        let config = serde_qs::Config::new(0, false);
-        let map: HashMap<String, String> = config.deserialize_str(qs.as_str()).unwrap();
-        let mut params: FindUsersParams = FindUsersParams::default();
-        if map.contains_key("search") {
-            params.search = map.get("search").cloned();
+fn with_find_request() -> impl Filter<Extract = (FindUsersRequest, ), Error = warp::Rejection> + Clone {
+    warp::query::<FindUsersParams>().and_then(|params: FindUsersParams| async move {
+        let mut req: FindUsersRequest = FindUsersRequest::default();
+        if params.search.is_some() {
+            req.search = params.search;
         }
-        if map.contains_key("sort_by") {
-            params.sort_by = map.get("sort_by").cloned();
+        if params.sort_by.is_some() {
+            let sort_by = params.sort_by.unwrap();
+            match sort_by.as_str() {
+                "name" | "email" => (),
+                &_ => {
+                    return Err(warp::reject::custom(
+                        ApiError::ParsingError("sort_by".to_string(), "Must be one of name and email".to_string())
+                    ));
+                },
+            }
+            req.sort_by = Some(sort_by);
         }
-        if map.contains_key("limit") {
-            let limit = match map.get("limit").unwrap().parse::<u32>() {
+        if params.limit.is_some() {
+            let limit = match params.limit.unwrap().parse::<u32>() {
                 Ok(r) => r,
                 Err(e) => {
                     return Err(warp::reject::custom(
@@ -47,16 +53,13 @@ fn with_find_params() -> impl Filter<Extract = (FindUsersParams, ), Error = warp
                     ));
                 },
             };
-            params.limit = Some(limit);
-        }
-        match params.validate() {
-            Ok(_) => (),
-            Err(e) => {
+            if limit < 1 && limit > 100 {
                 return Err(warp::reject::custom(
-                    ApiError::ValidationError(e)
+                    ApiError::ParsingError("limit".to_string(), "Must be between 1 and 100".to_string())
                 ));
-            },
+            }
+            req.limit = Some(limit);
         }
-        Ok(params)
+        Ok(req)
     })
 }

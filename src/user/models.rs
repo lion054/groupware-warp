@@ -1,24 +1,23 @@
 use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
-use validator::{Validate, ValidationError};
 
 // find
 
-#[derive(Default, Validate, Deserialize)]
+#[derive(Default, Deserialize)]
 pub struct FindUsersParams {
     pub search: Option<String>,
-    #[validate(custom = "validate_sort_by")]
     pub sort_by: Option<String>,
-    #[validate(range(min = 1, max = 100))]
+    pub limit: Option<String>,
+}
+
+#[derive(Default)]
+pub struct FindUsersRequest {
+    pub search: Option<String>,
+    pub sort_by: Option<String>,
     pub limit: Option<u32>,
 }
 
-fn validate_sort_by(sort_by: &str) -> Result<(), ValidationError> {
-    match sort_by {
-        "name" | "email" => Ok(()),
-        _ => Err(ValidationError::new("Must be one of name and email")),
-    }
-}
+// response
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UserResponse {

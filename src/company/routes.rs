@@ -1,16 +1,11 @@
-use arangors::Database;
 use bytes::Buf;
 use serde_json::Deserializer;
-use std::{
-    collections::HashMap,
-    convert::Infallible,
-};
-use uclient::reqwest::ReqwestClient;
+use std::collections::HashMap;
 use validator::Validate;
 use warp::Filter;
 
-use crate::config::db_database;
-use crate::database::{DbConn, DbPool};
+use crate::database::DbPool;
+use crate::helpers::with_db;
 use crate::error_handler::ApiError;
 use crate::company::{
     self,
@@ -82,15 +77,6 @@ fn delete_company(
         .and(with_delete_params())
         .and(with_db(pool))
         .and_then(company::delete_company)
-}
-
-fn with_db(
-    pool: DbPool,
-) -> impl Filter<Extract = (Database<ReqwestClient>, ), Error = Infallible> + Clone {
-    warp::any().map(move || {
-        let conn: DbConn = pool.get().unwrap();
-        conn.db(&db_database()).unwrap()
-    })
 }
 
 fn with_find_params() -> impl Filter<Extract = (FindCompaniesParams, ), Error = warp::Rejection> + Clone {

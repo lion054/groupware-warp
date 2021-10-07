@@ -25,6 +25,7 @@ use crate::company::{
     CreateCompanyRequest,
     DeleteCompanyParams,
     FindCompaniesParams,
+    RestoreCompanyRequest,
     UpdateCompanyParams,
     UpdateCompanyRequest,
 };
@@ -216,11 +217,8 @@ fn trash_company(
     db: Database<ReqwestClient>,
 ) -> JsonResult { // don't use opaque type to avoid compile error
     let collection: Collection<ReqwestClient> = db.collection("companies").unwrap();
-    let obj = serde_json::json!({
-        "deleted_at": Utc::now(),
-    });
-    let text = serde_json::to_string(&obj).unwrap();
-    let data: UpdateCompanyRequest = serde_json::from_str::<UpdateCompanyRequest>(&text).unwrap();
+    let mut data: UpdateCompanyRequest = UpdateCompanyRequest::default();
+    data.deleted_at = Some(Utc::now());
     let options: UpdateOptions = UpdateOptions::builder()
         .return_new(true)
         .return_old(true)
@@ -250,15 +248,15 @@ fn restore_company(
     db: Database<ReqwestClient>,
 ) -> JsonResult { // don't use opaque type to avoid compile error
     let collection: Collection<ReqwestClient> = db.collection("companies").unwrap();
-    let data: UpdateCompanyRequest = serde_json::from_str::<UpdateCompanyRequest>("{\"deleted_at\":null}").unwrap();
+    let mut data: RestoreCompanyRequest = RestoreCompanyRequest::default();
+    data.deleted_at = Some(Value::Null);
     let options: UpdateOptions = UpdateOptions::builder()
         .return_new(true)
-        .return_old(false)
         .keep_null(false)
         .build();
-    let res: DocumentResponse<Document<UpdateCompanyRequest>> = collection.update_document(&key, Document::new(data), options).unwrap();
-    let doc: &UpdateCompanyRequest = res.new_doc().unwrap();
-    let record: UpdateCompanyRequest = doc.clone();
+    let res: DocumentResponse<Document<RestoreCompanyRequest>> = collection.update_document(&key, Document::new(data), options).unwrap();
+    let doc: &RestoreCompanyRequest = res.new_doc().unwrap();
+    let record: RestoreCompanyRequest = doc.clone();
     let header = res.header().unwrap();
     let response = CompanyResponse {
         _id: header._id.clone(),
@@ -268,7 +266,7 @@ fn restore_company(
         since: record.since.unwrap(),
         created_at: record.created_at.unwrap(),
         modified_at: record.modified_at.unwrap(),
-        deleted_at: record.deleted_at,
+        deleted_at: None,
     };
     Ok(warp::reply::with_status(
         warp::reply::json(&response),

@@ -1,5 +1,6 @@
 use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use validator::{Validate, ValidationError};
 
 // find
@@ -46,7 +47,7 @@ pub struct UpdateCompanyParams {
     pub since: Option<DateTime<Utc>>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct UpdateCompanyRequest {
     #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
     pub name: Option<String>,
@@ -66,6 +67,20 @@ pub struct UpdateCompanyRequest {
 pub struct DeleteCompanyParams {
     #[validate(custom = "validate_mode")]
     pub mode: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct RestoreCompanyRequest {
+    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
+    pub since: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
+    pub created_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
+    pub modified_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
+    pub deleted_at: Option<Value>, // it would be filled by Null for removing this field
 }
 
 fn validate_mode(mode: &str) -> Result<(), ValidationError> {

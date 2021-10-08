@@ -44,6 +44,38 @@ pub struct CreateUserRequest {
     pub modified_at: DateTime<Utc>,
 }
 
+// update
+
+#[derive(Clone, Debug, Default, Validate, Serialize, Deserialize)]
+pub struct UpdateUserParams {
+    pub name: Option<String>,
+    #[validate(email)]
+    pub email: Option<String>,
+    #[validate(length(min = 6))]
+    pub password: Option<String>,
+    #[validate(must_match = "password")]
+    pub password_confirmation: Option<String>,
+    pub avatar: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UpdateUserRequest {
+    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
+    pub email: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
+    pub password: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
+    pub avatar: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
+    pub created_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
+    pub modified_at: Option<DateTime<Utc>>, // must be None on trash
+    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
+    pub deleted_at: Option<DateTime<Utc>>,
+}
+
 // response
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

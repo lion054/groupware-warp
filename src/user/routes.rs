@@ -21,6 +21,7 @@ use crate::user::{
     CreateUserParams,
     FindUsersParams,
     FindUsersRequest,
+    UpdateUserParams,
 };
 
 pub fn init(
@@ -28,7 +29,8 @@ pub fn init(
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     find_users(pool.clone())
         .or(show_user(pool.clone()))
-        .or(create_user(pool))
+        .or(create_user(pool.clone()))
+        .or(update_user(pool))
 }
 
 /// GET /users
@@ -61,6 +63,17 @@ fn create_user(
         .and(with_create_params())
         .and(with_db(pool))
         .and_then(user::create_user)
+}
+
+/// PUT /users/:key
+fn update_user(
+    pool: DbPool,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    warp::path!("users" / String)
+        .and(warp::put())
+        .and(with_update_params())
+        .and(with_db(pool))
+        .and_then(user::update_user)
 }
 
 // warp::query::raw can't hook rejection of InvalidQuery for incorrect data type
@@ -119,6 +132,102 @@ async fn validate_create_params(
         )
     }).unwrap();
 
+    let vars: HashMap<String, String> = accept_uploading(parts).await.unwrap();
+
+    let params = CreateUserParams {
+        name: if vars.contains_key("name") {
+            Some(vars.get("name").unwrap().to_string())
+        } else {
+            None
+        },
+        email: if vars.contains_key("email") {
+            Some(vars.get("email").unwrap().to_string())
+        } else {
+            None
+        },
+        password: if vars.contains_key("password") {
+            Some(vars.get("password").unwrap().to_string())
+        } else {
+            None
+        },
+        password_confirmation: if vars.contains_key("password_confirmation") {
+            Some(vars.get("password_confirmation").unwrap().to_string())
+        } else {
+            None
+        },
+        avatar: if vars.contains_key("avatar") {
+            Some(vars.get("avatar").unwrap().to_string())
+        } else {
+            None
+        },
+    };
+    match params.validate() {
+        Ok(_) => Ok(params),
+        Err(e) => {
+            Err(warp::reject::custom(
+                ApiError::ValidationError(e)
+            ))
+        },
+    }
+}
+
+fn with_update_params() -> impl Filter<Extract = (UpdateUserParams, ), Error = warp::Rejection> + Clone {
+    warp::multipart::form().max_length(5_000_000).and_then(validate_update_params)
+}
+
+async fn validate_update_params(
+    form: FormData,
+) -> Result<UpdateUserParams, warp::Rejection> {
+    println!("123");
+    let parts: Vec<Part> = form.try_collect().await.map_err(|e| {
+        println!("{:?}", e);
+        warp::reject::custom(
+            ApiError::ParsingError("sort_by".to_string(), "Must be one of name and email".to_string())
+        )
+    }).unwrap();
+
+    let vars: HashMap<String, String> = accept_uploading(parts).await.unwrap();
+
+    let params = UpdateUserParams {
+        name: if vars.contains_key("name") {
+            Some(vars.get("name").unwrap().to_string())
+        } else {
+            None
+        },
+        email: if vars.contains_key("email") {
+            Some(vars.get("email").unwrap().to_string())
+        } else {
+            None
+        },
+        password: if vars.contains_key("password") {
+            Some(vars.get("password").unwrap().to_string())
+        } else {
+            None
+        },
+        password_confirmation: if vars.contains_key("password_confirmation") {
+            Some(vars.get("password_confirmation").unwrap().to_string())
+        } else {
+            None
+        },
+        avatar: if vars.contains_key("avatar") {
+            Some(vars.get("avatar").unwrap().to_string())
+        } else {
+            None
+        },
+    };
+    match params.validate() {
+        Ok(_) => Ok(params),
+        Err(e) => {
+            Err(warp::reject::custom(
+                ApiError::ValidationError(e)
+            ))
+        },
+    }
+}
+
+async fn accept_uploading(
+    parts: Vec<Part>,
+) -> Result<HashMap<String, String>, warp::Rejection> {
     let mut vars: HashMap<String, String> = HashMap::new();
     for p in parts {
         let field_name = p.name().clone().to_string();
@@ -163,40 +272,5 @@ async fn validate_create_params(
             vars.insert(field_name, String::from_utf8(value).unwrap());
         }
     }
-
-    let params = CreateUserParams {
-        name: if vars.contains_key("name") {
-            Some(vars.get("name").unwrap().to_string())
-        } else {
-            None
-        },
-        email: if vars.contains_key("email") {
-            Some(vars.get("email").unwrap().to_string())
-        } else {
-            None
-        },
-        password: if vars.contains_key("password") {
-            Some(vars.get("password").unwrap().to_string())
-        } else {
-            None
-        },
-        password_confirmation: if vars.contains_key("password_confirmation") {
-            Some(vars.get("password_confirmation").unwrap().to_string())
-        } else {
-            None
-        },
-        avatar: if vars.contains_key("avatar") {
-            Some(vars.get("avatar").unwrap().to_string())
-        } else {
-            None
-        },
-    };
-    match params.validate() {
-        Ok(_) => Ok(params),
-        Err(e) => {
-            Err(warp::reject::custom(
-                ApiError::ValidationError(e)
-            ))
-        },
-    }
+    Ok(vars)
 }

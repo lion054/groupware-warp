@@ -128,22 +128,18 @@ pub async fn update_company(
 ) -> Result<impl warp::Reply, warp::Rejection> {
     tokio::task::spawn_blocking(move || {
         let collection: Collection<ReqwestClient> = db.collection("companies").unwrap();
-        let obj: Value = serde_json::json!({
-            "modified_at": Utc::now(),
-        });
-        let text: String = serde_json::to_string(&obj).unwrap();
-        let mut data: UpdateCompanyRequest = serde_json::from_str::<UpdateCompanyRequest>(&text).unwrap();
-        if params.name.is_some() {
-            data.name = params.name.clone();
-        }
-        if params.since.is_some() {
-            data.since = params.since.clone();
-        }
+        let req = UpdateCompanyRequest {
+            name: params.name,
+            since: params.since,
+            created_at: None,
+            modified_at: Some(Utc::now()),
+            deleted_at: None,
+        };
         let options: UpdateOptions = UpdateOptions::builder()
             .return_new(true)
-            .return_old(true)
             .build();
-        let res: DocumentResponse<Document<UpdateCompanyRequest>> = collection.update_document(&key, Document::new(data), options).unwrap();
+
+        let res: DocumentResponse<Document<UpdateCompanyRequest>> = collection.update_document(&key, Document::new(req), options).unwrap();
         let record: &UpdateCompanyRequest = res.new_doc().unwrap();
         let header = res.header().unwrap();
         let response = CompanyResponse {
@@ -192,6 +188,7 @@ fn erase_company(
     let options: RemoveOptions = RemoveOptions::builder()
         .return_old(true)
         .build();
+
     let res: DocumentResponse<Document<UpdateCompanyRequest>> = collection.remove_document(&key, options, None).unwrap();
     let doc: &UpdateCompanyRequest = res.old_doc().unwrap();
     let record: UpdateCompanyRequest = doc.clone();
@@ -217,11 +214,15 @@ fn trash_company(
     db: Database<ReqwestClient>,
 ) -> JsonResult { // don't use opaque type to avoid compile error
     let collection: Collection<ReqwestClient> = db.collection("companies").unwrap();
-    let mut data: UpdateCompanyRequest = UpdateCompanyRequest::default();
-    data.deleted_at = Some(Utc::now());
+    let data = UpdateCompanyRequest {
+        name: None,
+        since: None,
+        created_at: None,
+        modified_at: None,
+        deleted_at: Some(Utc::now()),
+    };
     let options: UpdateOptions = UpdateOptions::builder()
         .return_new(true)
-        .return_old(true)
         .build();
     let res: DocumentResponse<Document<UpdateCompanyRequest>> = collection.update_document(&key, Document::new(data), options).unwrap();
     let doc: &UpdateCompanyRequest = res.new_doc().unwrap();

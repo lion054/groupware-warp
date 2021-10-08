@@ -45,7 +45,7 @@ pub struct UpdateCompanyParams {
     pub since: Option<DateTime<Utc>>,
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UpdateCompanyRequest {
     #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
     pub name: Option<String>,
@@ -54,7 +54,7 @@ pub struct UpdateCompanyRequest {
     #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
     pub created_at: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
-    pub modified_at: Option<DateTime<Utc>>,
+    pub modified_at: Option<DateTime<Utc>>, // must be None on trash
     #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
     pub deleted_at: Option<DateTime<Utc>>,
 }
@@ -65,6 +65,13 @@ pub struct UpdateCompanyRequest {
 pub struct DeleteCompanyParams {
     #[validate(custom = "validate_mode")]
     pub mode: String,
+}
+
+fn validate_mode(mode: &str) -> Result<(), ValidationError> {
+    match mode {
+        "erase" | "trash" | "restore" => Ok(()),
+        _ => Err(ValidationError::new("Wrong mode")),
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -79,13 +86,6 @@ pub struct RestoreCompanyRequest {
     pub modified_at: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
     pub deleted_at: Option<Value>, // it would be filled by Null for removing this field
-}
-
-fn validate_mode(mode: &str) -> Result<(), ValidationError> {
-    match mode {
-        "erase" | "trash" | "restore" => Ok(()),
-        _ => Err(ValidationError::new("Wrong mode")),
-    }
 }
 
 // response

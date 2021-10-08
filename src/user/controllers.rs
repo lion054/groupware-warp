@@ -19,6 +19,8 @@ use crate::user::{
     CreateUserRequest,
     FindUsersRequest,
     UserResponse,
+    UpdateUserParams,
+    UpdateUserRequest,
 };
 
 pub async fn find_users(
@@ -77,7 +79,6 @@ pub async fn create_user(
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let collection: Collection<ReqwestClient> = db.collection("users").unwrap();
     let now = Utc::now();
-
     let req = CreateUserRequest {
         name: params.name.unwrap(),
         email: params.email.unwrap(),
@@ -86,10 +87,10 @@ pub async fn create_user(
         created_at: now,
         modified_at: now,
     };
-
     let options: InsertOptions = InsertOptions::builder()
         .return_new(true)
         .build();
+
     let res: DocumentResponse<Document<CreateUserRequest>> = collection.create_document(Document::new(req), options).unwrap();
     let doc: &CreateUserRequest = res.new_doc().unwrap();
     let record: CreateUserRequest = doc.clone();
@@ -108,5 +109,48 @@ pub async fn create_user(
     Ok(warp::reply::with_status(
         warp::reply::json(&response),
         StatusCode::CREATED,
+    ))
+}
+
+pub async fn update_user(
+    key: String,
+    params: UpdateUserParams,
+    db: Database<ReqwestClient>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let collection: Collection<ReqwestClient> = db.collection("users").unwrap();
+    let req = UpdateUserRequest {
+        name: params.name,
+        email: params.email,
+        password: match params.password {
+            Some(pswd) => Some(hash(pswd, DEFAULT_COST).unwrap()),
+            None => None,
+        },
+        avatar: params.avatar,
+        created_at: None,
+        modified_at: Some(Utc::now()),
+        deleted_at: None,
+    };
+    let options: UpdateOptions = UpdateOptions::builder()
+        .return_new(true)
+        .build();
+
+    let res: DocumentResponse<Document<UpdateUserRequest>> = collection.update_document(&key, Document::new(req), options).unwrap();
+    let doc: &UpdateUserRequest = res.new_doc().unwrap();
+    let record: UpdateUserRequest = doc.clone();
+    let header = res.header().unwrap();
+    let response = UserResponse {
+        _id: header._id.clone(),
+        _key: header._key.clone(),
+        _rev: header._rev.clone(),
+        name: record.name.unwrap(),
+        email: record.email.unwrap(),
+        avatar: record.avatar.unwrap(),
+        created_at: record.created_at.unwrap(),
+        modified_at: record.modified_at.unwrap(),
+        deleted_at: record.deleted_at,
+    };
+    Ok(warp::reply::with_status(
+        warp::reply::json(&response),
+        StatusCode::OK,
     ))
 }

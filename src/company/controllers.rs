@@ -6,7 +6,6 @@ use arangors::{
     AqlQuery, Collection, Database, Document,
 };
 use chrono::prelude::*;
-use serde_json::Value;
 use std::{
     convert::Infallible,
     vec::Vec,
@@ -26,6 +25,7 @@ use crate::company::{
     DeleteCompanyParams,
     FindCompaniesRequest,
     RestoreCompanyRequest,
+    TrashCompanyRequest,
     UpdateCompanyParams,
     UpdateCompanyRequest,
 };
@@ -214,19 +214,14 @@ fn trash_company(
     db: Database<ReqwestClient>,
 ) -> JsonResult { // don't use opaque type to avoid compile error
     let collection: Collection<ReqwestClient> = db.collection("companies").unwrap();
-    let data = UpdateCompanyRequest {
-        name: None,
-        since: None,
-        created_at: None,
-        modified_at: None,
-        deleted_at: Some(Utc::now()),
-    };
+    let data = TrashCompanyRequest::default();
     let options: UpdateOptions = UpdateOptions::builder()
         .return_new(true)
         .build();
-    let res: DocumentResponse<Document<UpdateCompanyRequest>> = collection.update_document(&key, Document::new(data), options).unwrap();
-    let doc: &UpdateCompanyRequest = res.new_doc().unwrap();
-    let record: UpdateCompanyRequest = doc.clone();
+
+    let res: DocumentResponse<Document<TrashCompanyRequest>> = collection.update_document(&key, Document::new(data), options).unwrap();
+    let doc: &TrashCompanyRequest = res.new_doc().unwrap();
+    let record: TrashCompanyRequest = doc.clone();
     let header = res.header().unwrap();
     let response = CompanyResponse {
         _id: header._id.clone(),
@@ -236,7 +231,7 @@ fn trash_company(
         since: record.since.unwrap(),
         created_at: record.created_at.unwrap(),
         modified_at: record.modified_at.unwrap(),
-        deleted_at: record.deleted_at,
+        deleted_at: Some(record.deleted_at),
     };
     Ok(warp::reply::with_status(
         warp::reply::json(&response),
@@ -249,12 +244,12 @@ fn restore_company(
     db: Database<ReqwestClient>,
 ) -> JsonResult { // don't use opaque type to avoid compile error
     let collection: Collection<ReqwestClient> = db.collection("companies").unwrap();
-    let mut data: RestoreCompanyRequest = RestoreCompanyRequest::default();
-    data.deleted_at = Some(Value::Null);
+    let data = RestoreCompanyRequest::default();
     let options: UpdateOptions = UpdateOptions::builder()
         .return_new(true)
         .keep_null(false)
         .build();
+
     let res: DocumentResponse<Document<RestoreCompanyRequest>> = collection.update_document(&key, Document::new(data), options).unwrap();
     let doc: &RestoreCompanyRequest = res.new_doc().unwrap();
     let record: RestoreCompanyRequest = doc.clone();

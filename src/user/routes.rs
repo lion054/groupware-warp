@@ -60,6 +60,7 @@ fn create_user(
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("users")
         .and(warp::post())
+        .and(warp::header::exact_ignore_case("content-type", "multipart/form-data"))
         .and(with_create_params())
         .and(with_db(pool))
         .and_then(user::create_user)
@@ -71,6 +72,7 @@ fn update_user(
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("users" / String)
         .and(warp::put())
+        .and(warp::header::exact_ignore_case("content-type", "multipart/form-data"))
         .and(with_update_params())
         .and(with_db(pool))
         .and_then(user::update_user)

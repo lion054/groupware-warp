@@ -52,6 +52,7 @@ fn create_company(
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("companies")
         .and(warp::post())
+        .and(warp::header::exact_ignore_case("content-type", "application/json"))
         .and(with_create_params())
         .and(with_db(pool))
         .and_then(company::create_company)
@@ -63,6 +64,7 @@ fn update_company(
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("companies" / String)
         .and(warp::put())
+        .and(warp::header::exact_ignore_case("content-type", "application/json"))
         .and(with_update_params())
         .and(with_db(pool))
         .and_then(company::update_company)
@@ -74,6 +76,7 @@ fn delete_company(
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("companies" / String)
         .and(warp::delete())
+        .and(warp::header::exact_ignore_case("content-type", "application/json"))
         .and(with_delete_params())
         .and(with_db(pool))
         .and_then(company::delete_company)

@@ -8,6 +8,7 @@ use validator::{ValidationErrors, ValidationErrorsKind};
 use warp::{
     cors::CorsForbidden,
     http::StatusCode,
+    reject::InvalidHeader,
 };
 
 #[derive(Error, Debug)]
@@ -49,6 +50,8 @@ pub async fn handle_rejection(
         (StatusCode::NOT_FOUND, "Not found".to_string(), None)
     } else if let Some(e) = r.find::<CorsForbidden>() {
         (StatusCode::FORBIDDEN, e.to_string(), None)
+    } else if let Some(e) = r.find::<InvalidHeader>() {
+        (StatusCode::BAD_REQUEST, e.to_string(), None)
     } else if let Some(e) = r.find::<ApiError>() {
         match e {
             ApiError::ParsingError(field, msg) => {

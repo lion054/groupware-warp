@@ -2,6 +2,8 @@ use bytes::BufMut;
 use std::{
     collections::HashMap,
     env,
+    ffi::OsStr,
+    path::Path,
 };
 use futures::{StreamExt, TryStreamExt};
 use uuid::Uuid;
@@ -120,25 +122,17 @@ async fn validate_create_params(
     let mut vars: HashMap<String, String> = HashMap::new();
     for p in parts {
         let field_name = p.name().clone().to_string();
-        let content_type = p.content_type();
-        let mut file_ending: Option<String> = None;
-        if p.filename().is_some() {
-            match content_type.unwrap() {
-                "application/pdf" => {
-                    file_ending = Some("pdf".to_string());
-                }
-                "image/jpeg" => {
-                    file_ending = Some("jpg".to_string());
-                }
-                "image/png" => {
-                    file_ending = Some("png".to_string());
-                }
-                v => {
-                    let msg = format!("invalid file type found: {}", v);
-                    return Err(warp::reject::custom(
-                        ApiError::ParsingError("avatar".to_string(), msg)
-                    ));
-                }
+        let org_filename = p.filename().clone();
+        let mut file_extension: Option<String> = None;
+        if org_filename.is_some() {
+            let content_type = p.content_type().unwrap();
+            if content_type.starts_with("image/") {
+                file_extension = Some(Path::new(org_filename.unwrap()).extension().and_then(OsStr::to_str).unwrap().to_string());
+            } else {
+                let msg = format!("invalid file type found: {}", content_type);
+                return Err(warp::reject::custom(
+                    ApiError::ParsingError("avatar".to_string(), msg)
+                ));
             }
         }
 
@@ -152,19 +146,19 @@ async fn validate_create_params(
             )
         }).unwrap();
 
-        if file_ending.is_some() {
-            let mut filepath = env::current_dir().unwrap();
-            filepath.push("storage");
-            let file_name = format!("{}.{}", Uuid::new_v4().to_string(), file_ending.unwrap().as_str());
-            filepath.push(file_name.clone());
-            tokio::fs::write(&filepath, value).await.map_err(|e| {
+        if file_extension.is_some() {
+            let mut abs_filepath = env::current_dir().unwrap();
+            abs_filepath.push("storage");
+            let new_filename = format!("{}.{}", Uuid::new_v4().to_string(), file_extension.unwrap().as_str());
+            abs_filepath.push(new_filename.clone());
+            tokio::fs::write(&abs_filepath, value).await.map_err(|e| {
                 let msg = format!("error writing file: {}", e);
                 warp::reject::custom(
                     ApiError::ParsingError("avatar".to_string(), msg)
                 )
             }).unwrap();
-            let val = format!("/storage/{}", file_name);
-            vars.insert(field_name, val);
+            let rel_filepath = format!("/storage/{}", new_filename);
+            vars.insert(field_name, rel_filepath);
         } else {
             vars.insert(field_name, String::from_utf8(value).unwrap());
         }

@@ -16,6 +16,7 @@ diesel = { version = "1.4", features = ["uuidv07", "r2d2", "chrono"] }
 dotenv = "0.15"
 futures = "0.3"
 mime = "0.3"
+path-slash = "0.1"
 r2d2 = "0.8"
 r2d2_arangors = "0.2"
 serde = { version = "1.0", features = ["derive"] }

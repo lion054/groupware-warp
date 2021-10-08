@@ -7,8 +7,12 @@ use arangors::{
 };
 use bcrypt::{DEFAULT_COST, hash, verify};
 use chrono::prelude::*;
+use path_slash::{PathBufExt, PathExt};
 use std::{
     convert::Infallible,
+    env,
+    fs,
+    path::{Path, PathBuf},
     vec::Vec,
 };
 use uclient::reqwest::ReqwestClient;
@@ -194,6 +198,11 @@ fn erase_user(
     let res: DocumentResponse<Document<UpdateUserRequest>> = collection.remove_document(&key, options, None).unwrap();
     let doc: &UpdateUserRequest = res.old_doc().unwrap();
     let record: UpdateUserRequest = doc.clone();
+
+    let avatar = record.avatar.unwrap().clone();
+    let filepath = format!("{}{}", env::current_dir().unwrap().to_str().unwrap(), PathBuf::from_slash(&avatar).to_str().unwrap());
+    fs::remove_file(Path::new(&filepath)).unwrap();
+
     let header = res.header().unwrap();
     let response = UserResponse {
         _id: header._id.clone(),
@@ -201,7 +210,7 @@ fn erase_user(
         _rev: header._rev.clone(),
         name: record.name.unwrap(),
         email: record.email.unwrap(),
-        avatar: record.avatar.unwrap(),
+        avatar: avatar,
         created_at: record.created_at.unwrap(),
         modified_at: record.modified_at,
         deleted_at: record.deleted_at,

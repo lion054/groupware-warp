@@ -5,15 +5,18 @@ use arangors::{
     },
     AqlQuery, Collection, Database, Document,
 };
-use serde_json::Value;
+use bcrypt::{DEFAULT_COST, hash, verify};
+use chrono::prelude::*;
 use std::{
     convert::Infallible,
     vec::Vec,
 };
 use uclient::reqwest::ReqwestClient;
-use warp;
+use warp::http::StatusCode;
 
 use crate::user::{
+    CreateUserParams,
+    CreateUserRequest,
     FindUsersRequest,
     UserResponse,
 };
@@ -66,4 +69,44 @@ pub async fn show_user(
         let record: UserResponse = result.document;
         Ok(warp::reply::json(&record))
     }).await.expect("Task panicked")
+}
+
+pub async fn create_user(
+    params: CreateUserParams,
+    db: Database<ReqwestClient>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let collection: Collection<ReqwestClient> = db.collection("users").unwrap();
+    let now = Utc::now();
+
+    let req = CreateUserRequest {
+        name: params.name.unwrap(),
+        email: params.email.unwrap(),
+        password: hash(params.password.unwrap(), DEFAULT_COST).unwrap(),
+        avatar: params.avatar.unwrap(),
+        created_at: now,
+        modified_at: now,
+    };
+
+    let options: InsertOptions = InsertOptions::builder()
+        .return_new(true)
+        .build();
+    let res: DocumentResponse<Document<CreateUserRequest>> = collection.create_document(Document::new(req), options).unwrap();
+    let doc: &CreateUserRequest = res.new_doc().unwrap();
+    let record: CreateUserRequest = doc.clone();
+    let header = res.header().unwrap();
+    let response = UserResponse {
+        _id: header._id.clone(),
+        _key: header._key.clone(),
+        _rev: header._rev.clone(),
+        name: record.name,
+        email: record.email,
+        avatar: record.avatar,
+        created_at: record.created_at,
+        modified_at: record.modified_at,
+        deleted_at: None,
+    };
+    Ok(warp::reply::with_status(
+        warp::reply::json(&response),
+        StatusCode::CREATED,
+    ))
 }

@@ -132,7 +132,7 @@ pub async fn update_company(
             name: params.name,
             since: params.since,
             created_at: None,
-            modified_at: Some(Utc::now()),
+            modified_at: Utc::now(),
             deleted_at: None,
         };
         let options: UpdateOptions = UpdateOptions::builder()
@@ -149,7 +149,7 @@ pub async fn update_company(
             name: record.name.clone().unwrap(),
             since: record.since.unwrap(),
             created_at: record.created_at.unwrap(),
-            modified_at: record.modified_at.unwrap(),
+            modified_at: record.modified_at,
             deleted_at: record.deleted_at,
         };
         Ok(warp::reply::with_status(
@@ -200,7 +200,7 @@ fn erase_company(
         name: record.name.unwrap(),
         since: record.since.unwrap(),
         created_at: record.created_at.unwrap(),
-        modified_at: record.modified_at.unwrap(),
+        modified_at: record.modified_at,
         deleted_at: record.deleted_at,
     };
     Ok(warp::reply::with_status(

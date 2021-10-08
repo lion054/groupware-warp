@@ -53,8 +53,7 @@ pub struct UpdateCompanyRequest {
     pub since: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
     pub created_at: Option<DateTime<Utc>>,
-    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
-    pub modified_at: Option<DateTime<Utc>>, // must be None on trash
+    pub modified_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
     pub deleted_at: Option<DateTime<Utc>>,
 }

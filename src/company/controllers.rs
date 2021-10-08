@@ -17,12 +17,14 @@ use warp::{
     http::StatusCode,
 };
 
-use crate::helpers::JsonResult;
+use crate::helpers::{
+    DeleteParams,
+    JsonResult,
+};
 use crate::company::{
     CompanyResponse,
     CreateCompanyParams,
     CreateCompanyRequest,
-    DeleteCompanyParams,
     FindCompaniesRequest,
     RestoreCompanyRequest,
     TrashCompanyRequest,
@@ -161,7 +163,7 @@ pub async fn update_company(
 
 pub async fn delete_company(
     key: String,
-    params: DeleteCompanyParams,
+    params: DeleteParams,
     db: Database<ReqwestClient>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     tokio::task::spawn_blocking(move || {

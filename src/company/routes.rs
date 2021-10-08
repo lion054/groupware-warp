@@ -4,12 +4,14 @@ use validator::Validate;
 use warp::Filter;
 
 use crate::database::DbPool;
-use crate::helpers::with_db;
+use crate::helpers::{
+    DeleteParams,
+    with_db,
+};
 use crate::error_handler::ApiError;
 use crate::company::{
     self,
     CreateCompanyParams,
-    DeleteCompanyParams,
     FindCompaniesParams,
     FindCompaniesRequest,
     UpdateCompanyParams,
@@ -180,15 +182,15 @@ async fn validate_update_params(
     Ok(params)
 }
 
-fn with_delete_params() -> impl Filter<Extract = (DeleteCompanyParams, ), Error = warp::Rejection> + Clone {
+fn with_delete_params() -> impl Filter<Extract = (DeleteParams, ), Error = warp::Rejection> + Clone {
     warp::body::aggregate().and_then(validate_delete_params)
 }
 
 async fn validate_delete_params(
     buf: impl Buf,
-) -> Result<DeleteCompanyParams, warp::Rejection> {
+) -> Result<DeleteParams, warp::Rejection> {
     let deserializer = &mut Deserializer::from_reader(buf.reader());
-    let params: DeleteCompanyParams = match serde_path_to_error::deserialize(deserializer) {
+    let params: DeleteParams = match serde_path_to_error::deserialize(deserializer) {
         Ok(r) => r,
         Err(e) => {
             let pieces: Vec<String> = e.to_string().as_str().split(": ").map(String::from).collect();

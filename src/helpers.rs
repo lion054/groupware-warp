@@ -1,9 +1,11 @@
 use arangors::Database;
+use serde::Deserialize;
 use std::{
     convert::Infallible,
     result::Result,
 };
 use uclient::reqwest::ReqwestClient;
+use validator::{Validate, ValidationError};
 use warp::{
     Filter,
     Rejection,
@@ -22,4 +24,19 @@ pub fn with_db(
         let conn: DbConn = pool.get().unwrap();
         conn.db(&db_database()).unwrap()
     })
+}
+
+// delete
+
+#[derive(Debug, Validate, Deserialize)]
+pub struct DeleteParams {
+    #[validate(custom = "validate_mode")]
+    pub mode: String,
+}
+
+fn validate_mode(mode: &str) -> Result<(), ValidationError> {
+    match mode {
+        "erase" | "trash" | "restore" => Ok(()),
+        _ => Err(ValidationError::new("Wrong mode")),
+    }
 }

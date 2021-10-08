@@ -14,10 +14,16 @@ use std::{
 use uclient::reqwest::ReqwestClient;
 use warp::http::StatusCode;
 
+use crate::helpers::{
+    DeleteParams,
+    JsonResult,
+};
 use crate::user::{
     CreateUserParams,
     CreateUserRequest,
     FindUsersRequest,
+    RestoreUserRequest,
+    TrashUserRequest,
     UserResponse,
     UpdateUserParams,
     UpdateUserRequest,
@@ -127,7 +133,7 @@ pub async fn update_user(
         },
         avatar: params.avatar,
         created_at: None,
-        modified_at: Some(Utc::now()),
+        modified_at: Utc::now(),
         deleted_at: None,
     };
     let options: UpdateOptions = UpdateOptions::builder()
@@ -146,8 +152,122 @@ pub async fn update_user(
         email: record.email.unwrap(),
         avatar: record.avatar.unwrap(),
         created_at: record.created_at.unwrap(),
-        modified_at: record.modified_at.unwrap(),
+        modified_at: record.modified_at,
         deleted_at: record.deleted_at,
+    };
+    Ok(warp::reply::with_status(
+        warp::reply::json(&response),
+        StatusCode::OK,
+    ))
+}
+
+pub async fn delete_user(
+    key: String,
+    params: DeleteParams,
+    db: Database<ReqwestClient>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    tokio::task::spawn_blocking(move || {
+        match params.mode.as_str() {
+            "erase" => erase_user(key, db),
+            "trash" => trash_user(key, db),
+            "restore" => restore_user(key, db),
+            &_ => {
+                let invalid_response: Vec<UserResponse> = vec![];
+                Ok(warp::reply::with_status(
+                    warp::reply::json(&invalid_response),
+                    StatusCode::NO_CONTENT,
+                ))
+            },
+        }
+    }).await.expect("Task panicked")
+}
+
+fn erase_user(
+    key: String,
+    db: Database<ReqwestClient>,
+) -> JsonResult { // don't use opaque type to avoid compile error
+    let collection: Collection<ReqwestClient> = db.collection("users").unwrap();
+    let options: RemoveOptions = RemoveOptions::builder()
+        .return_old(true)
+        .build();
+
+    let res: DocumentResponse<Document<UpdateUserRequest>> = collection.remove_document(&key, options, None).unwrap();
+    let doc: &UpdateUserRequest = res.old_doc().unwrap();
+    let record: UpdateUserRequest = doc.clone();
+    let header = res.header().unwrap();
+    let response = UserResponse {
+        _id: header._id.clone(),
+        _key: header._key.clone(),
+        _rev: header._rev.clone(),
+        name: record.name.unwrap(),
+        email: record.email.unwrap(),
+        avatar: record.avatar.unwrap(),
+        created_at: record.created_at.unwrap(),
+        modified_at: record.modified_at,
+        deleted_at: record.deleted_at,
+    };
+    Ok(warp::reply::with_status(
+        warp::reply::json(&response),
+        StatusCode::NO_CONTENT,
+    ))
+}
+
+fn trash_user(
+    key: String,
+    db: Database<ReqwestClient>,
+) -> JsonResult { // don't use opaque type to avoid compile error
+    let collection: Collection<ReqwestClient> = db.collection("users").unwrap();
+    let data = TrashUserRequest::default();
+    let options: UpdateOptions = UpdateOptions::builder()
+        .return_new(true)
+        .build();
+
+    let res: DocumentResponse<Document<TrashUserRequest>> = collection.update_document(&key, Document::new(data), options).unwrap();
+    let doc: &TrashUserRequest = res.new_doc().unwrap();
+    let record: TrashUserRequest = doc.clone();
+    let header = res.header().unwrap();
+    let response = UserResponse {
+        _id: header._id.clone(),
+        _key: header._key.clone(),
+        _rev: header._rev.clone(),
+        name: record.name.unwrap(),
+        email: record.email.unwrap(),
+        avatar: record.avatar.unwrap(),
+        created_at: record.created_at.unwrap(),
+        modified_at: record.modified_at.unwrap(),
+        deleted_at: Some(record.deleted_at),
+    };
+    Ok(warp::reply::with_status(
+        warp::reply::json(&response),
+        StatusCode::OK,
+    ))
+}
+
+fn restore_user(
+    key: String,
+    db: Database<ReqwestClient>,
+) -> JsonResult { // don't use opaque type to avoid compile error
+    let collection: Collection<ReqwestClient> = db.collection("users").unwrap();
+    let data = RestoreUserRequest::default();
+    let options: UpdateOptions = UpdateOptions::builder()
+        .return_new(true)
+        .keep_null(false)
+        .build();
+
+    let res: DocumentResponse<Document<RestoreUserRequest>> = collection.update_document(&key, Document::new(data), options).unwrap();
+    let doc: &RestoreUserRequest = res.new_doc().unwrap();
+    let record: RestoreUserRequest = doc.clone();
+    let header = res.header().unwrap();
+    let response = UserResponse {
+        _id: header._id.clone(),
+        _key: header._key.clone(),
+        _rev: header._rev.clone(),
+        name: record.name.unwrap(),
+        email: record.email.unwrap(),
+        avatar: record.avatar.unwrap(),
+        created_at: record.created_at.unwrap(),
+        modified_at: record.modified_at.unwrap(),
+        deleted_at: None,
     };
     Ok(warp::reply::with_status(
         warp::reply::json(&response),

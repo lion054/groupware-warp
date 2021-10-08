@@ -1,4 +1,4 @@
-use bytes::BufMut;
+use bytes::{Buf, BufMut};
 use std::{
     collections::HashMap,
     env,
@@ -6,6 +6,7 @@ use std::{
     path::Path,
 };
 use futures::{StreamExt, TryStreamExt};
+use serde_json::Deserializer;
 use uuid::Uuid;
 use validator::Validate;
 use warp::{
@@ -14,7 +15,10 @@ use warp::{
 };
 
 use crate::database::DbPool;
-use crate::helpers::with_db;
+use crate::helpers::{
+    DeleteParams,
+    with_db,
+};
 use crate::error_handler::ApiError;
 use crate::user::{
     self,
@@ -30,7 +34,8 @@ pub fn init(
     find_users(pool.clone())
         .or(show_user(pool.clone()))
         .or(create_user(pool.clone()))
-        .or(update_user(pool))
+        .or(update_user(pool.clone()))
+        .or(delete_user(pool))
 }
 
 /// GET /users
@@ -76,6 +81,18 @@ fn update_user(
         .and(with_update_params())
         .and(with_db(pool))
         .and_then(user::update_user)
+}
+
+/// DELETE /users/:key
+fn delete_user(
+    pool: DbPool,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    warp::path!("users" / String)
+        .and(warp::delete())
+        .and(warp::header::exact_ignore_case("content-type", "application/json"))
+        .and(with_delete_params())
+        .and(with_db(pool))
+        .and_then(user::delete_user)
 }
 
 // warp::query::raw can't hook rejection of InvalidQuery for incorrect data type
@@ -275,4 +292,32 @@ async fn accept_uploading(
         }
     }
     Ok(vars)
+}
+
+fn with_delete_params() -> impl Filter<Extract = (DeleteParams, ), Error = warp::Rejection> + Clone {
+    warp::body::aggregate().and_then(validate_delete_params)
+}
+
+async fn validate_delete_params(
+    buf: impl Buf,
+) -> Result<DeleteParams, warp::Rejection> {
+    let deserializer = &mut Deserializer::from_reader(buf.reader());
+    let params: DeleteParams = match serde_path_to_error::deserialize(deserializer) {
+        Ok(r) => r,
+        Err(e) => {
+            let pieces: Vec<String> = e.to_string().as_str().split(": ").map(String::from).collect();
+            return Err(warp::reject::custom(
+                ApiError::ParsingError(pieces[0].clone(), pieces[1].clone())
+            ));
+        },
+    };
+    match params.validate() {
+        Ok(_) => (),
+        Err(e) => {
+            return Err(warp::reject::custom(
+                ApiError::ValidationError(e)
+            ));
+        },
+    }
+    Ok(params)
 }

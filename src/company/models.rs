@@ -1,7 +1,7 @@
 use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use validator::{Validate, ValidationError};
+use validator::Validate;
 
 // find
 
@@ -60,19 +60,6 @@ pub struct UpdateCompanyRequest {
 
 // delete
 
-#[derive(Debug, Validate, Deserialize)]
-pub struct DeleteCompanyParams {
-    #[validate(custom = "validate_mode")]
-    pub mode: String,
-}
-
-fn validate_mode(mode: &str) -> Result<(), ValidationError> {
-    match mode {
-        "erase" | "trash" | "restore" => Ok(()),
-        _ => Err(ValidationError::new("Wrong mode")),
-    }
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TrashCompanyRequest {
     #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
@@ -108,7 +95,7 @@ pub struct RestoreCompanyRequest {
     pub created_at: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
     pub modified_at: Option<DateTime<Utc>>,
-    pub deleted_at: Value,
+    pub deleted_at: Option<Value>, // on response, value will not exist
 }
 
 impl Default for RestoreCompanyRequest {
@@ -118,7 +105,7 @@ impl Default for RestoreCompanyRequest {
             since: None,
             created_at: None,
             modified_at: None,
-            deleted_at: Value::Null,
+            deleted_at: Some(Value::Null),
         }
     }
 }

@@ -23,7 +23,6 @@ serde_path_to_error = "0.1"
 serde_qs = "0.8"
 thiserror = "1.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-uclient = { path = "./libs/uclient", version = "0.2.3", default-features = false, features = ["async_reqwest"] }
 uuid = { version = "0.8", features = ["serde", "v4"] }
 validator = { version = "0.14", features = ["derive"] }
 warp = "0.3"

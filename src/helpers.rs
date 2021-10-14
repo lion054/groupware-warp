@@ -1,10 +1,8 @@
-use arangors::Database;
 use serde::Deserialize;
 use std::{
     convert::Infallible,
     result::Result,
 };
-use uclient::reqwest::ReqwestClient;
 use validator::{Validate, ValidationError};
 use warp::{
     Filter,
@@ -12,17 +10,15 @@ use warp::{
     reply::{Json, WithStatus},
 };
 
-use crate::config::db_database;
-use crate::database::{DbConn, DbPool};
+use crate::database::DbPool;
 
 pub type JsonResult = Result<WithStatus<Json>, Rejection>;
 
 pub fn with_db(
     pool: DbPool,
-) -> impl Filter<Extract = (Database<ReqwestClient>, ), Error = Infallible> + Clone {
+) -> impl Filter<Extract = (DbPool, ), Error = Infallible> + Clone {
     warp::any().map(move || {
-        let conn: DbConn = pool.get().unwrap();
-        conn.db(&db_database()).unwrap()
+        pool.clone()
     })
 }
 

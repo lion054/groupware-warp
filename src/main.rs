@@ -18,7 +18,7 @@ async fn main() {
         .allow_header("Content-Type")
         .allow_methods(&[Method::GET, Method::POST, Method::PUT, Method::DELETE]);
 
-    let pool = database::init_pool().expect("Failed to create pool");
+    let pool = database::init_pool();
     let routes = api_filters(pool).with(cors);
 
     warp::serve(routes)

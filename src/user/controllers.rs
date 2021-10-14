@@ -1,4 +1,5 @@
 use arangors::{
+    connection::ReqwestClient,
     document::{
         options::{InsertOptions, RemoveOptions, UpdateOptions},
         response::DocumentResponse,
@@ -15,9 +16,10 @@ use std::{
     path::{Path, PathBuf},
     vec::Vec,
 };
-use uclient::reqwest::ReqwestClient;
 use warp::http::StatusCode;
 
+use crate::config::db_database;
+use crate::database::DbPool;
 use crate::helpers::{
     DeleteParams,
     JsonResult,
@@ -35,59 +37,64 @@ use crate::user::{
 
 pub async fn find_users(
     req: FindUsersRequest,
-    db: Database<ReqwestClient>,
+    pool: DbPool,
 ) -> Result<impl warp::Reply, Infallible> {
-    tokio::task::spawn_blocking(move || {
-        let mut terms = vec!["FOR x IN users"];
-        let search_term;
-        let sort_by_term;
-        let limit_term;
+    let client = pool.get().await.unwrap();
+    let db = client.db(&db_database()).await.unwrap();
 
-        if req.search.is_some() {
-            let search: String = req.search.unwrap().trim().to_string().clone();
-            if !search.is_empty() {
-                search_term = format!("FILTER CONTAINS(x.name, '{}') OR CONTAINS(x.email, '{}')", search, search);
-                terms.push(search_term.as_str());
-            }
-        }
-        if req.sort_by.is_some() {
-            let sort_by: String = req.sort_by.unwrap();
-            sort_by_term = format!("SORT x.{} ASC", sort_by);
-            terms.push(sort_by_term.as_str());
-        }
-        if req.limit.is_some() {
-            let limit: u32 = req.limit.unwrap();
-            limit_term = format!("LIMIT 0, {}", limit);
-            terms.push(limit_term.as_str());
-        }
+    let mut terms = vec!["FOR x IN users"];
+    let search_term;
+    let sort_by_term;
+    let limit_term;
 
-        terms.push("RETURN x");
-        let q = terms.join(" ");
-        let aql = AqlQuery::builder()
-            .query(q.as_str())
-            .build();
-        let records: Vec<UserResponse> = db.aql_query(aql).expect("Query failed");
-        Ok(warp::reply::json(&records))
-    }).await.expect("Task panicked")
+    if req.search.is_some() {
+        let search: String = req.search.unwrap().trim().to_string().clone();
+        if !search.is_empty() {
+            search_term = format!("FILTER CONTAINS(x.name, '{}') OR CONTAINS(x.email, '{}')", search, search);
+            terms.push(search_term.as_str());
+        }
+    }
+    if req.sort_by.is_some() {
+        let sort_by: String = req.sort_by.unwrap();
+        sort_by_term = format!("SORT x.{} ASC", sort_by);
+        terms.push(sort_by_term.as_str());
+    }
+    if req.limit.is_some() {
+        let limit: u32 = req.limit.unwrap();
+        limit_term = format!("LIMIT 0, {}", limit);
+        terms.push(limit_term.as_str());
+    }
+
+    terms.push("RETURN x");
+    let q = terms.join(" ");
+    let aql = AqlQuery::builder()
+        .query(q.as_str())
+        .build();
+    let records: Vec<UserResponse> = db.aql_query(aql).await.unwrap();
+    Ok(warp::reply::json(&records))
 }
 
 pub async fn show_user(
     key: String,
-    db: Database<ReqwestClient>,
+    pool: DbPool,
 ) -> Result<impl warp::Reply, Infallible> {
-    tokio::task::spawn_blocking(move || {
-        let collection: Collection<ReqwestClient> = db.collection("users").unwrap();
-        let result: Document<UserResponse> = collection.document(key.as_ref()).unwrap();
-        let record: UserResponse = result.document;
-        Ok(warp::reply::json(&record))
-    }).await.expect("Task panicked")
+    let client = pool.get().await.unwrap();
+    let db = client.db(&db_database()).await.unwrap();
+
+    let collection: Collection<ReqwestClient> = db.collection("users").await.unwrap();
+    let result: Document<UserResponse> = collection.document(key.as_ref()).await.unwrap();
+    let record: UserResponse = result.document;
+    Ok(warp::reply::json(&record))
 }
 
 pub async fn create_user(
     params: CreateUserParams,
-    db: Database<ReqwestClient>,
+    pool: DbPool,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let collection: Collection<ReqwestClient> = db.collection("users").unwrap();
+    let client = pool.get().await.unwrap();
+    let db = client.db(&db_database()).await.unwrap();
+
+    let collection: Collection<ReqwestClient> = db.collection("users").await.unwrap();
     let now = Utc::now();
     let req = CreateUserRequest {
         name: params.name.unwrap(),
@@ -101,7 +108,7 @@ pub async fn create_user(
         .return_new(true)
         .build();
 
-    let res: DocumentResponse<Document<CreateUserRequest>> = collection.create_document(Document::new(req), options).unwrap();
+    let res: DocumentResponse<Document<CreateUserRequest>> = collection.create_document(Document::new(req), options).await.unwrap();
     let doc: &CreateUserRequest = res.new_doc().unwrap();
     let record: CreateUserRequest = doc.clone();
     let header = res.header().unwrap();
@@ -125,9 +132,12 @@ pub async fn create_user(
 pub async fn update_user(
     key: String,
     params: UpdateUserParams,
-    db: Database<ReqwestClient>,
+    pool: DbPool,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let collection: Collection<ReqwestClient> = db.collection("users").unwrap();
+    let client = pool.get().await.unwrap();
+    let db = client.db(&db_database()).await.unwrap();
+
+    let collection: Collection<ReqwestClient> = db.collection("users").await.unwrap();
     let req = UpdateUserRequest {
         name: params.name,
         email: params.email,
@@ -144,7 +154,7 @@ pub async fn update_user(
         .return_new(true)
         .build();
 
-    let res: DocumentResponse<Document<UpdateUserRequest>> = collection.update_document(&key, Document::new(req), options).unwrap();
+    let res: DocumentResponse<Document<UpdateUserRequest>> = collection.update_document(&key, Document::new(req), options).await.unwrap();
     let doc: &UpdateUserRequest = res.new_doc().unwrap();
     let record: UpdateUserRequest = doc.clone();
     let header = res.header().unwrap();
@@ -168,34 +178,35 @@ pub async fn update_user(
 pub async fn delete_user(
     key: String,
     params: DeleteParams,
-    db: Database<ReqwestClient>,
+    pool: DbPool,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    tokio::task::spawn_blocking(move || {
-        match params.mode.as_str() {
-            "erase" => erase_user(key, db),
-            "trash" => trash_user(key, db),
-            "restore" => restore_user(key, db),
-            &_ => {
-                let invalid_response: Vec<UserResponse> = vec![];
-                Ok(warp::reply::with_status(
-                    warp::reply::json(&invalid_response),
-                    StatusCode::NO_CONTENT,
-                ))
-            },
-        }
-    }).await.expect("Task panicked")
+    let client = pool.get().await.unwrap();
+    let db = client.db(&db_database()).await.unwrap();
+
+    match params.mode.as_str() {
+        "erase" => erase_user(key, db).await,
+        "trash" => trash_user(key, db).await,
+        "restore" => restore_user(key, db).await,
+        &_ => {
+            let invalid_response: Vec<UserResponse> = vec![];
+            Ok(warp::reply::with_status(
+                warp::reply::json(&invalid_response),
+                StatusCode::NO_CONTENT,
+            ))
+        },
+    }
 }
 
-fn erase_user(
+async fn erase_user(
     key: String,
     db: Database<ReqwestClient>,
 ) -> JsonResult { // don't use opaque type to avoid compile error
-    let collection: Collection<ReqwestClient> = db.collection("users").unwrap();
+    let collection: Collection<ReqwestClient> = db.collection("users").await.unwrap();
     let options: RemoveOptions = RemoveOptions::builder()
         .return_old(true)
         .build();
 
-    let res: DocumentResponse<Document<UpdateUserRequest>> = collection.remove_document(&key, options, None).unwrap();
+    let res: DocumentResponse<Document<UpdateUserRequest>> = collection.remove_document(&key, options, None).await.unwrap();
     let doc: &UpdateUserRequest = res.old_doc().unwrap();
     let record: UpdateUserRequest = doc.clone();
 
@@ -221,17 +232,17 @@ fn erase_user(
     ))
 }
 
-fn trash_user(
+async fn trash_user(
     key: String,
     db: Database<ReqwestClient>,
 ) -> JsonResult { // don't use opaque type to avoid compile error
-    let collection: Collection<ReqwestClient> = db.collection("users").unwrap();
+    let collection: Collection<ReqwestClient> = db.collection("users").await.unwrap();
     let data = TrashUserRequest::default();
     let options: UpdateOptions = UpdateOptions::builder()
         .return_new(true)
         .build();
 
-    let res: DocumentResponse<Document<TrashUserRequest>> = collection.update_document(&key, Document::new(data), options).unwrap();
+    let res: DocumentResponse<Document<TrashUserRequest>> = collection.update_document(&key, Document::new(data), options).await.unwrap();
     let doc: &TrashUserRequest = res.new_doc().unwrap();
     let record: TrashUserRequest = doc.clone();
     let header = res.header().unwrap();
@@ -252,18 +263,18 @@ fn trash_user(
     ))
 }
 
-fn restore_user(
+async fn restore_user(
     key: String,
     db: Database<ReqwestClient>,
 ) -> JsonResult { // don't use opaque type to avoid compile error
-    let collection: Collection<ReqwestClient> = db.collection("users").unwrap();
+    let collection: Collection<ReqwestClient> = db.collection("users").await.unwrap();
     let data = RestoreUserRequest::default();
     let options: UpdateOptions = UpdateOptions::builder()
         .return_new(true)
         .keep_null(false)
         .build();
 
-    let res: DocumentResponse<Document<RestoreUserRequest>> = collection.update_document(&key, Document::new(data), options).unwrap();
+    let res: DocumentResponse<Document<RestoreUserRequest>> = collection.update_document(&key, Document::new(data), options).await.unwrap();
     let doc: &RestoreUserRequest = res.new_doc().unwrap();
     let record: RestoreUserRequest = doc.clone();
     let header = res.header().unwrap();

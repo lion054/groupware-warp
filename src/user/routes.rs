@@ -10,6 +10,7 @@ use serde_json::Deserializer;
 use uuid::Uuid;
 use validator::Validate;
 use warp::{
+    http::HeaderValue,
     multipart::{FormData, Part},
     Filter,
 };
@@ -65,7 +66,6 @@ fn create_user(
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("users")
         .and(warp::post())
-        .and(warp::header::exact_ignore_case("content-type", "multipart/form-data"))
         .and(with_create_params())
         .and(with_db(pool))
         .and_then(user::create_user)
@@ -77,7 +77,6 @@ fn update_user(
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("users" / String)
         .and(warp::put())
-        .and(warp::header::exact_ignore_case("content-type", "multipart/form-data"))
         .and(with_update_params())
         .and(with_db(pool))
         .and_then(user::update_user)
@@ -89,7 +88,6 @@ fn delete_user(
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("users" / String)
         .and(warp::delete())
-        .and(warp::header::exact_ignore_case("content-type", "application/json"))
         .and(with_delete_params())
         .and(with_db(pool))
         .and_then(user::delete_user)
@@ -138,12 +136,21 @@ fn with_find_request() -> impl Filter<Extract = (FindUsersRequest, ), Error = wa
 }
 
 fn with_create_params() -> impl Filter<Extract = (CreateUserParams, ), Error = warp::Rejection> + Clone {
-    warp::multipart::form().max_length(5_000_000).and_then(validate_create_params)
+    warp::any()
+        .and(warp::header::value("content-type"))
+        .and(warp::multipart::form().max_length(5_000_000))
+        .and_then(validate_create_params)
 }
 
 async fn validate_create_params(
+    content_type: HeaderValue,
     form: FormData,
 ) -> Result<CreateUserParams, warp::Rejection> {
+    if content_type.to_str().unwrap().starts_with("multipart/form-data") == false {
+        return Err(warp::reject::custom(
+            ApiError::ParsingError("content-type".to_string(), "Must be multipart/form-data".to_string())
+        ));
+    }
     let parts: Vec<Part> = form.try_collect().await.map_err(|e| {
         println!("{:?}", e);
         warp::reject::custom(
@@ -191,13 +198,21 @@ async fn validate_create_params(
 }
 
 fn with_update_params() -> impl Filter<Extract = (UpdateUserParams, ), Error = warp::Rejection> + Clone {
-    warp::multipart::form().max_length(5_000_000).and_then(validate_update_params)
+    warp::any()
+        .and(warp::header::value("content-type"))
+        .and(warp::multipart::form().max_length(5_000_000))
+        .and_then(validate_update_params)
 }
 
 async fn validate_update_params(
+    content_type: HeaderValue,
     form: FormData,
 ) -> Result<UpdateUserParams, warp::Rejection> {
-    println!("123");
+    if content_type.to_str().unwrap().starts_with("multipart/form-data") == false {
+        return Err(warp::reject::custom(
+            ApiError::ParsingError("content-type".to_string(), "Must be multipart/form-data".to_string())
+        ));
+    }
     let parts: Vec<Part> = form.try_collect().await.map_err(|e| {
         println!("{:?}", e);
         warp::reject::custom(
@@ -295,12 +310,21 @@ async fn accept_uploading(
 }
 
 fn with_delete_params() -> impl Filter<Extract = (DeleteParams, ), Error = warp::Rejection> + Clone {
-    warp::body::aggregate().and_then(validate_delete_params)
+    warp::any()
+        .and(warp::header::value("content-type"))
+        .and(warp::body::aggregate())
+        .and_then(validate_delete_params)
 }
 
 async fn validate_delete_params(
+    content_type: HeaderValue,
     buf: impl Buf,
 ) -> Result<DeleteParams, warp::Rejection> {
+    if content_type.to_str().unwrap().starts_with("application/json") == false {
+        return Err(warp::reject::custom(
+            ApiError::ParsingError("content-type".to_string(), "Must be application/json".to_string())
+        ));
+    }
     let deserializer = &mut Deserializer::from_reader(buf.reader());
     let params: DeleteParams = match serde_path_to_error::deserialize(deserializer) {
         Ok(r) => r,

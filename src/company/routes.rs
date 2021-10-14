@@ -1,6 +1,9 @@
 use serde_json::Deserializer;
 use validator::Validate;
-use warp::{Buf, Filter};
+use warp::{
+    http::HeaderValue,
+    Buf, Filter,
+};
 
 use crate::database::DbPool;
 use crate::helpers::{
@@ -53,7 +56,6 @@ fn create_company(
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("companies")
         .and(warp::post())
-        .and(warp::header::exact_ignore_case("content-type", "application/json"))
         .and(with_create_params())
         .and(with_db(pool))
         .and_then(company::create_company)
@@ -65,7 +67,6 @@ fn update_company(
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("companies" / String)
         .and(warp::put())
-        .and(warp::header::exact_ignore_case("content-type", "application/json"))
         .and(with_update_params())
         .and(with_db(pool))
         .and_then(company::update_company)
@@ -77,7 +78,6 @@ fn delete_company(
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("companies" / String)
         .and(warp::delete())
-        .and(warp::header::exact_ignore_case("content-type", "application/json"))
         .and(with_delete_params())
         .and(with_db(pool))
         .and_then(company::delete_company)
@@ -126,12 +126,21 @@ fn with_find_request() -> impl Filter<Extract = (FindCompaniesRequest, ), Error 
 }
 
 fn with_create_params() -> impl Filter<Extract = (CreateCompanyParams, ), Error = warp::Rejection> + Clone {
-    warp::body::aggregate().and_then(validate_create_params)
+    warp::any()
+        .and(warp::header::value("content-type"))
+        .and(warp::body::aggregate())
+        .and_then(validate_create_params)
 }
 
 async fn validate_create_params(
+    content_type: HeaderValue,
     buf: impl Buf,
 ) -> Result<CreateCompanyParams, warp::Rejection> {
+    if content_type.to_str().unwrap().starts_with("application/json") == false {
+        return Err(warp::reject::custom(
+            ApiError::ParsingError("content-type".to_string(), "Must be application/json".to_string())
+        ));
+    }
     let deserializer = &mut Deserializer::from_reader(buf.reader());
     let params: CreateCompanyParams = match serde_path_to_error::deserialize(deserializer) {
         Ok(r) => r,
@@ -154,12 +163,21 @@ async fn validate_create_params(
 }
 
 fn with_update_params() -> impl Filter<Extract = (UpdateCompanyParams, ), Error = warp::Rejection> + Clone {
-    warp::body::aggregate().and_then(validate_update_params)
+    warp::any()
+        .and(warp::header::value("content-type"))
+        .and(warp::body::aggregate())
+        .and_then(validate_update_params)
 }
 
 async fn validate_update_params(
+    content_type: HeaderValue,
     buf: impl Buf,
 ) -> Result<UpdateCompanyParams, warp::Rejection> {
+    if content_type.to_str().unwrap().starts_with("application/json") == false {
+        return Err(warp::reject::custom(
+            ApiError::ParsingError("content-type".to_string(), "Must be application/json".to_string())
+        ));
+    }
     let deserializer = &mut Deserializer::from_reader(buf.reader());
     let params: UpdateCompanyParams = match serde_path_to_error::deserialize(deserializer) {
         Ok(r) => r,
@@ -182,12 +200,21 @@ async fn validate_update_params(
 }
 
 fn with_delete_params() -> impl Filter<Extract = (DeleteParams, ), Error = warp::Rejection> + Clone {
-    warp::body::aggregate().and_then(validate_delete_params)
+    warp::any()
+        .and(warp::header::value("content-type"))
+        .and(warp::body::aggregate())
+        .and_then(validate_delete_params)
 }
 
 async fn validate_delete_params(
+    content_type: HeaderValue,
     buf: impl Buf,
 ) -> Result<DeleteParams, warp::Rejection> {
+    if content_type.to_str().unwrap().starts_with("application/json") == false {
+        return Err(warp::reject::custom(
+            ApiError::ParsingError("content-type".to_string(), "Must be application/json".to_string())
+        ));
+    }
     let deserializer = &mut Deserializer::from_reader(buf.reader());
     let params: DeleteParams = match serde_path_to_error::deserialize(deserializer) {
         Ok(r) => r,

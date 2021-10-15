@@ -290,18 +290,17 @@ async fn accept_uploading(
         }).unwrap();
 
         if file_extension.is_some() {
-            let mut abs_filepath = env::current_dir().unwrap();
-            abs_filepath.push("storage");
+            let mut file_path = env::current_dir().unwrap();
+            file_path.push("storage");
             let new_filename = format!("{}.{}", Uuid::new_v4().to_string(), file_extension.unwrap().as_str());
-            abs_filepath.push(new_filename.clone());
-            tokio::fs::write(&abs_filepath, value).await.map_err(|e| {
+            file_path.push(new_filename.clone());
+            tokio::fs::write(&file_path, value).await.map_err(|e| {
                 let msg = format!("error writing file: {}", e);
                 warp::reject::custom(
                     ApiError::ParsingError("avatar".to_string(), msg)
                 )
             }).unwrap();
-            let rel_filepath = format!("/storage/{}", new_filename);
-            vars.insert(field_name, rel_filepath);
+            vars.insert(field_name, new_filename);
         } else {
             vars.insert(field_name, String::from_utf8(value).unwrap());
         }

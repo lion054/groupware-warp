@@ -12,7 +12,6 @@ use path_slash::{PathBufExt, PathExt};
 use std::{
     convert::Infallible,
     env,
-    fs,
     path::{Path, PathBuf},
     vec::Vec,
 };
@@ -24,6 +23,7 @@ use crate::helpers::{
     DeleteParams,
     JsonResult,
 };
+use crate::error_handler::ApiError;
 use crate::user::{
     CreateUserParams,
     CreateUserRequest,
@@ -96,30 +96,68 @@ pub async fn create_user(
 
     let collection: Collection<ReqwestClient> = db.collection("users").await.unwrap();
     let now = Utc::now();
+    let mut avatar = format!("/storage/{}", params.avatar.clone().unwrap());
     let req = CreateUserRequest {
         name: params.name.unwrap(),
         email: params.email.unwrap(),
         password: hash(params.password.unwrap(), DEFAULT_COST).unwrap(),
-        avatar: params.avatar.unwrap(),
+        avatar: avatar.clone(),
         created_at: now,
         modified_at: now,
     };
-    let options: InsertOptions = InsertOptions::builder()
+    let options: InsertOptions = InsertOptions::builder().build();
+
+    let res: DocumentResponse<Document<CreateUserRequest>> = collection.create_document(Document::new(req), options).await.unwrap();
+    let header = res.header().unwrap();
+    let key = header._key.clone();
+
+    // move file into record directory
+    let mut abs_dirpath = env::current_dir().unwrap();
+    abs_dirpath.push("storage");
+    abs_dirpath.push(key.clone());
+    tokio::fs::create_dir_all(abs_dirpath).await.unwrap();
+    let org_rel_filepath = PathBuf::from_slash(avatar);
+    let org_abs_filepath = format!("{}{}", env::current_dir().unwrap().to_str().unwrap(), org_rel_filepath.to_str().unwrap());
+    avatar = format!("/storage/{}/{}", key, params.avatar.unwrap());
+    let new_rel_filepath = PathBuf::from_slash(avatar.clone());
+    let new_abs_filepath = format!("{}{}", env::current_dir().unwrap().to_str().unwrap(), new_rel_filepath.to_str().unwrap());
+    tokio::fs::rename(
+        PathBuf::from(org_abs_filepath),
+        PathBuf::from(new_abs_filepath),
+    ).await.map_err(|e| {
+        let msg = format!("error moving file: {}", e);
+        warp::reject::custom(
+            ApiError::ParsingError("avatar".to_string(), msg)
+        )
+    }).unwrap();
+
+    // update database for avatar path
+    let req = UpdateUserRequest {
+        name: None,
+        email: None,
+        password: None,
+        avatar: Some(avatar.clone()),
+        created_at: None,
+        modified_at: Utc::now(),
+        deleted_at: None,
+    };
+    let options: UpdateOptions = UpdateOptions::builder()
         .return_new(true)
         .build();
 
-    let res: DocumentResponse<Document<CreateUserRequest>> = collection.create_document(Document::new(req), options).await.unwrap();
-    let doc: &CreateUserRequest = res.new_doc().unwrap();
-    let record: CreateUserRequest = doc.clone();
+    let res: DocumentResponse<Document<UpdateUserRequest>> = collection.update_document(&key, Document::new(req), options).await.unwrap();
+    let doc: &UpdateUserRequest = res.new_doc().unwrap();
+    let record: UpdateUserRequest = doc.clone();
     let header = res.header().unwrap();
+
     let response = UserResponse {
         _id: header._id.clone(),
         _key: header._key.clone(),
         _rev: header._rev.clone(),
-        name: record.name,
-        email: record.email,
-        avatar: record.avatar,
-        created_at: record.created_at,
+        name: record.name.unwrap(),
+        email: record.email.unwrap(),
+        avatar: avatar,
+        created_at: record.created_at.unwrap(),
         modified_at: record.modified_at,
         deleted_at: None,
     };
@@ -138,6 +176,41 @@ pub async fn update_user(
     let db = client.db(&db_database()).await.unwrap();
 
     let collection: Collection<ReqwestClient> = db.collection("users").await.unwrap();
+    let result: Document<UserResponse> = collection.document(key.as_ref()).await.unwrap();
+    let old_record: UserResponse = result.document;
+    let mut avatar = None;
+
+    if params.avatar.is_some() {
+        // make sure record directory exists
+        let mut abs_dirpath = env::current_dir().unwrap();
+        abs_dirpath.push("storage");
+        abs_dirpath.push(key.clone());
+        tokio::fs::create_dir_all(abs_dirpath).await.unwrap();
+        // move new image into record directory
+        let org_filename = params.avatar.unwrap();
+        let org_rel_filepath = PathBuf::from_slash(format!("/storage/{}", org_filename));
+        let org_abs_filepath = format!("{}{}", env::current_dir().unwrap().to_str().unwrap(), org_rel_filepath.to_str().unwrap());
+        let rel_filepath = format!("/storage/{}/{}", key.clone(), org_filename);
+        let new_rel_filepath = PathBuf::from_slash(rel_filepath.clone());
+        let new_abs_filepath = format!("{}{}", env::current_dir().unwrap().to_str().unwrap(), new_rel_filepath.to_str().unwrap());
+        tokio::fs::rename(
+            PathBuf::from(org_abs_filepath),
+            PathBuf::from(new_abs_filepath),
+        ).await.map_err(|e| {
+            let msg = format!("error moving file: {}", e);
+            warp::reject::custom(
+                ApiError::ParsingError("avatar".to_string(), msg)
+            )
+        }).unwrap();
+        // delete old image
+        let old_rel_filepath = PathBuf::from_slash(old_record.avatar);
+        let old_abs_filepath = format!("{}{}", env::current_dir().unwrap().to_str().unwrap(), old_rel_filepath.to_str().unwrap());
+        tokio::fs::remove_file(
+            PathBuf::from(old_abs_filepath)
+        ).await.unwrap();
+        avatar = Some(rel_filepath);
+    }
+
     let req = UpdateUserRequest {
         name: params.name,
         email: params.email,
@@ -145,7 +218,7 @@ pub async fn update_user(
             Some(pswd) => Some(hash(pswd, DEFAULT_COST).unwrap()),
             None => None,
         },
-        avatar: params.avatar,
+        avatar: avatar,
         created_at: None,
         modified_at: Utc::now(),
         deleted_at: None,
@@ -158,6 +231,7 @@ pub async fn update_user(
     let doc: &UpdateUserRequest = res.new_doc().unwrap();
     let record: UpdateUserRequest = doc.clone();
     let header = res.header().unwrap();
+
     let response = UserResponse {
         _id: header._id.clone(),
         _key: header._key.clone(),
@@ -209,19 +283,21 @@ async fn erase_user(
     let res: DocumentResponse<Document<UpdateUserRequest>> = collection.remove_document(&key, options, None).await.unwrap();
     let doc: &UpdateUserRequest = res.old_doc().unwrap();
     let record: UpdateUserRequest = doc.clone();
-
-    let avatar = record.avatar.unwrap().clone();
-    let filepath = format!("{}{}", env::current_dir().unwrap().to_str().unwrap(), PathBuf::from_slash(&avatar).to_str().unwrap());
-    fs::remove_file(Path::new(&filepath)).unwrap();
-
     let header = res.header().unwrap();
+
+    // delete record directory including image file
+    let mut abs_dirpath = env::current_dir().unwrap();
+    abs_dirpath.push("storage");
+    abs_dirpath.push(key.clone());
+    tokio::fs::remove_dir_all(abs_dirpath).await.unwrap();
+
     let response = UserResponse {
         _id: header._id.clone(),
-        _key: header._key.clone(),
+        _key: key,
         _rev: header._rev.clone(),
         name: record.name.unwrap(),
         email: record.email.unwrap(),
-        avatar: avatar,
+        avatar: record.avatar.unwrap(),
         created_at: record.created_at.unwrap(),
         modified_at: record.modified_at,
         deleted_at: record.deleted_at,

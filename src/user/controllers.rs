@@ -103,7 +103,7 @@ pub async fn create_user(
         password: hash(params.password.unwrap(), DEFAULT_COST).unwrap(),
         avatar: avatar.clone(),
         created_at: now,
-        modified_at: now,
+        updated_at: now,
     };
     let options: InsertOptions = InsertOptions::builder().build();
 
@@ -138,7 +138,7 @@ pub async fn create_user(
         password: None,
         avatar: Some(avatar.clone()),
         created_at: None,
-        modified_at: Utc::now(),
+        updated_at: Utc::now(),
         deleted_at: None,
     };
     let options: UpdateOptions = UpdateOptions::builder()
@@ -158,7 +158,7 @@ pub async fn create_user(
         email: record.email.unwrap(),
         avatar: avatar,
         created_at: record.created_at.unwrap(),
-        modified_at: record.modified_at,
+        updated_at: record.updated_at,
         deleted_at: None,
     };
     Ok(warp::reply::with_status(
@@ -220,7 +220,7 @@ pub async fn update_user(
         },
         avatar: avatar,
         created_at: None,
-        modified_at: Utc::now(),
+        updated_at: Utc::now(),
         deleted_at: None,
     };
     let options: UpdateOptions = UpdateOptions::builder()
@@ -240,7 +240,7 @@ pub async fn update_user(
         email: record.email.unwrap(),
         avatar: record.avatar.unwrap(),
         created_at: record.created_at.unwrap(),
-        modified_at: record.modified_at,
+        updated_at: record.updated_at,
         deleted_at: record.deleted_at,
     };
     Ok(warp::reply::with_status(
@@ -299,7 +299,7 @@ async fn erase_user(
         email: record.email.unwrap(),
         avatar: record.avatar.unwrap(),
         created_at: record.created_at.unwrap(),
-        modified_at: record.modified_at,
+        updated_at: record.updated_at,
         deleted_at: record.deleted_at,
     };
     Ok(warp::reply::with_status(
@@ -330,7 +330,7 @@ async fn trash_user(
         email: record.email.unwrap(),
         avatar: record.avatar.unwrap(),
         created_at: record.created_at.unwrap(),
-        modified_at: record.modified_at.unwrap(),
+        updated_at: record.updated_at.unwrap(),
         deleted_at: Some(record.deleted_at),
     };
     Ok(warp::reply::with_status(
@@ -362,7 +362,7 @@ async fn restore_user(
         email: record.email.unwrap(),
         avatar: record.avatar.unwrap(),
         created_at: record.created_at.unwrap(),
-        modified_at: record.modified_at.unwrap(),
+        updated_at: record.updated_at.unwrap(),
         deleted_at: None,
     };
     Ok(warp::reply::with_status(

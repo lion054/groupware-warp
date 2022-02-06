@@ -42,7 +42,7 @@ pub struct CreateUserRequest {
     pub password: String,
     pub avatar: String,
     pub created_at: DateTime<Utc>,
-    pub modified_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 // update
@@ -71,7 +71,7 @@ pub struct UpdateUserRequest {
     pub avatar: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
     pub created_at: Option<DateTime<Utc>>,
-    pub modified_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
     pub deleted_at: Option<DateTime<Utc>>,
 }
@@ -89,7 +89,7 @@ pub struct TrashUserRequest {
     #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
     pub created_at: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
-    pub modified_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
     pub deleted_at: DateTime<Utc>,
 }
 
@@ -100,7 +100,7 @@ impl Default for TrashUserRequest {
             email: None,
             avatar: None,
             created_at: None,
-            modified_at: None,
+            updated_at: None,
             deleted_at: Utc::now(),
         }
     }
@@ -117,7 +117,7 @@ pub struct RestoreUserRequest {
     #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
     pub created_at: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
-    pub modified_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
     pub deleted_at: Option<Value>, // on response, value will not exist
 }
 
@@ -128,7 +128,7 @@ impl Default for RestoreUserRequest {
             email: None,
             avatar: None,
             created_at: None,
-            modified_at: None,
+            updated_at: None,
             deleted_at: Some(Value::Null),
         }
     }
@@ -145,7 +145,7 @@ pub struct UserResponse {
     pub email: String,
     pub avatar: String,
     pub created_at: DateTime<Utc>,
-    pub modified_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
     pub deleted_at: Option<DateTime<Utc>>,
 }

@@ -34,7 +34,7 @@ pub struct CreateCompanyRequest {
     pub name: String,
     pub since: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
-    pub modified_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 // update
@@ -53,7 +53,7 @@ pub struct UpdateCompanyRequest {
     pub since: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
     pub created_at: Option<DateTime<Utc>>,
-    pub modified_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
     pub deleted_at: Option<DateTime<Utc>>,
 }
@@ -69,7 +69,7 @@ pub struct TrashCompanyRequest {
     #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
     pub created_at: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
-    pub modified_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
     pub deleted_at: DateTime<Utc>,
 }
 
@@ -79,7 +79,7 @@ impl Default for TrashCompanyRequest {
             name: None,
             since: None,
             created_at: None,
-            modified_at: None,
+            updated_at: None,
             deleted_at: Utc::now(),
         }
     }
@@ -94,7 +94,7 @@ pub struct RestoreCompanyRequest {
     #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
     pub created_at: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
-    pub modified_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
     pub deleted_at: Option<Value>, // on response, value will not exist
 }
 
@@ -104,7 +104,7 @@ impl Default for RestoreCompanyRequest {
             name: None,
             since: None,
             created_at: None,
-            modified_at: None,
+            updated_at: None,
             deleted_at: Some(Value::Null),
         }
     }
@@ -120,7 +120,7 @@ pub struct CompanyResponse {
     pub name: String,
     pub since: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
-    pub modified_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
     pub deleted_at: Option<DateTime<Utc>>,
 }

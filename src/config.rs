@@ -9,21 +9,21 @@ pub fn port() -> String {
 }
 
 pub fn db_host() -> String {
-  return env::var("DB_HOST").expect("DB_HOST must be set");
+  return env::var("ARANGODB_HOST").expect("ARANGODB_HOST must be set");
 }
 
 pub fn db_port() -> String {
-  return env::var("DB_PORT").expect("DB_PORT must be set");
+  return env::var("ARANGODB_PORT").expect("ARANGODB_PORT must be set");
 }
 
 pub fn db_username() -> String {
-  return env::var("DB_USERNAME").expect("DB_USERNAME must be set");
+  return env::var("ARANGODB_USERNAME").expect("ARANGODB_USERNAME must be set");
 }
 
 pub fn db_password() -> String {
-  return env::var("DB_PASSWORD").expect("DB_PASSWORD must be set");
+  return env::var("ARANGODB_PASSWORD").expect("ARANGODB_PASSWORD must be set");
 }
 
 pub fn db_database() -> String {
-  return env::var("DB_DATABASE").expect("DB_DATABASE must be set");
+  return env::var("ARANGODB_DATABASE").expect("ARANGODB_DATABASE must be set");
 }

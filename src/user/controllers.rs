@@ -1,48 +1,28 @@
-use arangors::{
-    connection::ReqwestClient,
-    document::{
-        options::{InsertOptions, RemoveOptions, UpdateOptions},
-        response::DocumentResponse,
-    },
-    AqlQuery, Collection, Database, Document,
-};
 use bcrypt::{DEFAULT_COST, hash, verify};
-use chrono::prelude::*;
 use path_slash::{PathBufExt, PathExt};
 use std::{
     convert::Infallible,
     env,
     path::{Path, PathBuf},
+    sync::Arc,
     vec::Vec,
 };
 use warp::http::StatusCode;
 
-use crate::config::db_database;
-use crate::database::DbPool;
-use crate::helpers::{
-    DeleteParams,
-    JsonResult,
-};
 use crate::error_handler::ApiError;
 use crate::user::{
     CreateUserParams,
-    CreateUserRequest,
     FindUsersRequest,
-    RestoreUserRequest,
-    TrashUserRequest,
     UserResponse,
     UpdateUserParams,
-    UpdateUserRequest,
 };
+use crate::helpers::DeleteParams;
 
 pub async fn find_users(
     req: FindUsersRequest,
-    pool: DbPool,
+    graph: Arc<neo4rs::Graph>,
 ) -> Result<impl warp::Reply, Infallible> {
-    let client = pool.get().await.unwrap();
-    let db = client.db(&db_database()).await.unwrap();
-
-    let mut terms = vec!["FOR x IN users"];
+    let mut terms = vec!["MATCH (u:User)"];
     let search_term;
     let sort_by_term;
     let limit_term;
@@ -50,75 +30,83 @@ pub async fn find_users(
     if req.search.is_some() {
         let search: String = req.search.unwrap().trim().to_string().clone();
         if !search.is_empty() {
-            search_term = format!("FILTER CONTAINS(x.name, '{}') OR CONTAINS(x.email, '{}')", search, search);
+            search_term = format!("WHERE u.name CONTAINS '{0}' OR u.email CONTAINS '{0}'", search);
             terms.push(search_term.as_str());
         }
     }
     if req.sort_by.is_some() {
         let sort_by: String = req.sort_by.unwrap();
-        sort_by_term = format!("SORT x.{} ASC", sort_by);
+        sort_by_term = format!("ORDER BY u.{} ASC", sort_by);
         terms.push(sort_by_term.as_str());
     }
     if req.limit.is_some() {
         let limit: u32 = req.limit.unwrap();
-        limit_term = format!("LIMIT 0, {}", limit);
+        limit_term = format!("SKIP 0 LIMIT {}", limit);
         terms.push(limit_term.as_str());
     }
 
-    terms.push("RETURN x");
+    terms.push("RETURN u");
     let q = terms.join(" ");
-    let aql = AqlQuery::builder()
-        .query(q.as_str())
-        .build();
-    let records: Vec<UserResponse> = db.aql_query(aql).await.unwrap();
+
+    let mut result: neo4rs::RowStream = graph.execute(neo4rs::query(&q)).await.unwrap();
+    let mut records: Vec<UserResponse> = vec![];
+    while let Ok(Some(row)) = result.next().await {
+        let node: neo4rs::Node = row.get("u").unwrap();
+        records.push(UserResponse::from_node(node));
+    }
     Ok(warp::reply::json(&records))
 }
 
 pub async fn show_user(
-    key: String,
-    pool: DbPool,
+    id: String,
+    graph: Arc<neo4rs::Graph>,
 ) -> Result<impl warp::Reply, Infallible> {
-    let client = pool.get().await.unwrap();
-    let db = client.db(&db_database()).await.unwrap();
+    let q: neo4rs::Query = neo4rs::query("
+        MATCH (u:User)
+        WHERE id(u) = $id
+        RETURN u
+    ")
+    .param("id", id.parse::<i64>().unwrap());
 
-    let collection: Collection<ReqwestClient> = db.collection("users").await.unwrap();
-    let result: Document<UserResponse> = collection.document(key.as_ref()).await.unwrap();
-    let record: UserResponse = result.document;
+    let mut result: neo4rs::RowStream = graph.execute(q).await.unwrap();
+    let row: neo4rs::Row = result.next().await.unwrap().unwrap();
+    let node: neo4rs::Node = row.get("u").unwrap();
+    let record: UserResponse = UserResponse::from_node(node);
     Ok(warp::reply::json(&record))
 }
 
 pub async fn create_user(
     params: CreateUserParams,
-    pool: DbPool,
+    graph: Arc<neo4rs::Graph>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let client = pool.get().await.unwrap();
-    let db = client.db(&db_database()).await.unwrap();
+    let q: neo4rs::Query = neo4rs::query("
+        CREATE (u:User {
+            name: $name,
+            email: $email,
+            password: $password,
+            createdAt: datetime(),
+            updatedAt: datetime()
+        })
+        RETURN u
+    ")
+    .param("name", params.name.unwrap())
+    .param("email", params.email.unwrap())
+    .param("password", hash(params.password.unwrap(), DEFAULT_COST).unwrap());
 
-    let collection: Collection<ReqwestClient> = db.collection("users").await.unwrap();
-    let now = Utc::now();
+    let mut result: neo4rs::RowStream = graph.execute(q).await.unwrap();
+    let row: neo4rs::Row = result.next().await.unwrap().unwrap();
+    let node: neo4rs::Node = row.get("u").unwrap();
+
     let mut avatar = format!("/storage/{}", params.avatar.clone().unwrap());
-    let req = CreateUserRequest {
-        name: params.name.unwrap(),
-        email: params.email.unwrap(),
-        password: hash(params.password.unwrap(), DEFAULT_COST).unwrap(),
-        avatar: avatar.clone(),
-        created_at: now,
-        updated_at: now,
-    };
-    let options: InsertOptions = InsertOptions::builder().build();
-
-    let res: DocumentResponse<Document<CreateUserRequest>> = collection.create_document(Document::new(req), options).await.unwrap();
-    let header = res.header().unwrap();
-    let key = header._key.clone();
 
     // move file into record directory
     let mut abs_dirpath = env::current_dir().unwrap();
     abs_dirpath.push("storage");
-    abs_dirpath.push(key.clone());
+    abs_dirpath.push(node.id().to_string());
     tokio::fs::create_dir_all(abs_dirpath).await.unwrap();
     let org_rel_filepath = PathBuf::from_slash(avatar);
     let org_abs_filepath = format!("{}{}", env::current_dir().unwrap().to_str().unwrap(), org_rel_filepath.to_str().unwrap());
-    avatar = format!("/storage/{}/{}", key, params.avatar.unwrap());
+    avatar = format!("/storage/{}/{}", node.id(), params.avatar.unwrap());
     let new_rel_filepath = PathBuf::from_slash(avatar.clone());
     let new_abs_filepath = format!("{}{}", env::current_dir().unwrap().to_str().unwrap(), new_rel_filepath.to_str().unwrap());
     tokio::fs::rename(
@@ -132,65 +120,44 @@ pub async fn create_user(
     }).unwrap();
 
     // update database for avatar path
-    let req = UpdateUserRequest {
-        name: None,
-        email: None,
-        password: None,
-        avatar: Some(avatar.clone()),
-        created_at: None,
-        updated_at: Utc::now(),
-        deleted_at: None,
-    };
-    let options: UpdateOptions = UpdateOptions::builder()
-        .return_new(true)
-        .build();
+    let q: neo4rs::Query = neo4rs::query("
+        MATCH (u:User)
+        WHERE id(u) = $id
+        SET u.avatar = $avatar, u.updatedAt = datetime()
+        RETURN u
+    ")
+    .param("id", node.id())
+    .param("avatar", avatar);
 
-    let res: DocumentResponse<Document<UpdateUserRequest>> = collection.update_document(&key, Document::new(req), options).await.unwrap();
-    let doc: &UpdateUserRequest = res.new_doc().unwrap();
-    let record: UpdateUserRequest = doc.clone();
-    let header = res.header().unwrap();
-
-    let response = UserResponse {
-        _id: header._id.clone(),
-        _key: header._key.clone(),
-        _rev: header._rev.clone(),
-        name: record.name.unwrap(),
-        email: record.email.unwrap(),
-        avatar: avatar,
-        created_at: record.created_at.unwrap(),
-        updated_at: record.updated_at,
-        deleted_at: None,
-    };
+    let mut result: neo4rs::RowStream = graph.execute(q).await.unwrap();
+    let row: neo4rs::Row = result.next().await.unwrap().unwrap();
+    let node: neo4rs::Node = row.get("u").unwrap();
+    let record: UserResponse = UserResponse::from_node(node);
     Ok(warp::reply::with_status(
-        warp::reply::json(&response),
+        warp::reply::json(&record),
         StatusCode::CREATED,
     ))
 }
 
 pub async fn update_user(
-    key: String,
+    id: String,
     params: UpdateUserParams,
-    pool: DbPool,
+    graph: Arc<neo4rs::Graph>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let client = pool.get().await.unwrap();
-    let db = client.db(&db_database()).await.unwrap();
-
-    let collection: Collection<ReqwestClient> = db.collection("users").await.unwrap();
-    let result: Document<UserResponse> = collection.document(key.as_ref()).await.unwrap();
-    let old_record: UserResponse = result.document;
     let mut avatar = None;
 
     if params.avatar.is_some() {
         // make sure record directory exists
         let mut abs_dirpath = env::current_dir().unwrap();
         abs_dirpath.push("storage");
-        abs_dirpath.push(key.clone());
+        abs_dirpath.push(id.clone());
         tokio::fs::create_dir_all(abs_dirpath).await.unwrap();
+
         // move new image into record directory
         let org_filename = params.avatar.unwrap();
         let org_rel_filepath = PathBuf::from_slash(format!("/storage/{}", org_filename));
         let org_abs_filepath = format!("{}{}", env::current_dir().unwrap().to_str().unwrap(), org_rel_filepath.to_str().unwrap());
-        let rel_filepath = format!("/storage/{}/{}", key.clone(), org_filename);
+        let rel_filepath = format!("/storage/{}/{}", id.clone(), org_filename);
         let new_rel_filepath = PathBuf::from_slash(rel_filepath.clone());
         let new_abs_filepath = format!("{}{}", env::current_dir().unwrap().to_str().unwrap(), new_rel_filepath.to_str().unwrap());
         tokio::fs::rename(
@@ -202,8 +169,21 @@ pub async fn update_user(
                 ApiError::ParsingError("avatar".to_string(), msg)
             )
         }).unwrap();
+
+        // get original file path
+        let q: neo4rs::Query = neo4rs::query("
+            MATCH (c:Company)
+            WHERE id(c) = $id
+            RETURN c
+        ")
+        .param("id", id.parse::<i64>().unwrap());
+        let mut result: neo4rs::RowStream = graph.execute(q).await.unwrap();
+        let row: neo4rs::Row = result.next().await.unwrap().unwrap();
+        let node: neo4rs::Node = row.get("u").unwrap();
+
         // delete old image
-        let old_rel_filepath = PathBuf::from_slash(old_record.avatar);
+        let old_avatar: String = node.get("avatar").unwrap();
+        let old_rel_filepath = PathBuf::from_slash(old_avatar);
         let old_abs_filepath = format!("{}{}", env::current_dir().unwrap().to_str().unwrap(), old_rel_filepath.to_str().unwrap());
         tokio::fs::remove_file(
             PathBuf::from(old_abs_filepath)
@@ -211,162 +191,120 @@ pub async fn update_user(
         avatar = Some(rel_filepath);
     }
 
-    let req = UpdateUserRequest {
-        name: params.name,
-        email: params.email,
-        password: match params.password {
-            Some(pswd) => Some(hash(pswd, DEFAULT_COST).unwrap()),
-            None => None,
+    let mut terms = vec!["MATCH (u:User)"];
+    let w = format!("WHERE id(u) = {}", id);
+    terms.push(w.as_str());
+
+    let mut data = vec![];
+    match params.name {
+        Some(x) => {
+            data.push(format!("u.name = '{}'", x));
         },
-        avatar: avatar,
-        created_at: None,
-        updated_at: Utc::now(),
-        deleted_at: None,
-    };
-    let options: UpdateOptions = UpdateOptions::builder()
-        .return_new(true)
-        .build();
+        None => {},
+    }
+    match params.email {
+        Some(x) => {
+            data.push(format!("u.email = '{}'", x));
+        },
+        None => {},
+    }
+    match params.password {
+        Some(x) => {
+            data.push(format!("u.password = '{}'", hash(x, DEFAULT_COST).unwrap()));
+        },
+        None => {},
+    }
+    match avatar {
+        Some(x) => {
+            data.push(format!("u.avatar = '{}'", x));
+        },
+        None => {},
+    }
+    let s = format!("SET {}", data.join(", "));
+    terms.push(s.as_str());
+    terms.push("RETURN u");
 
-    let res: DocumentResponse<Document<UpdateUserRequest>> = collection.update_document(&key, Document::new(req), options).await.unwrap();
-    let doc: &UpdateUserRequest = res.new_doc().unwrap();
-    let record: UpdateUserRequest = doc.clone();
-    let header = res.header().unwrap();
-
-    let response = UserResponse {
-        _id: header._id.clone(),
-        _key: header._key.clone(),
-        _rev: header._rev.clone(),
-        name: record.name.unwrap(),
-        email: record.email.unwrap(),
-        avatar: record.avatar.unwrap(),
-        created_at: record.created_at.unwrap(),
-        updated_at: record.updated_at,
-        deleted_at: record.deleted_at,
-    };
+    let t = terms.join(" ");
+    let q: neo4rs::Query = neo4rs::query(t.as_str());
+    let mut result: neo4rs::RowStream = graph.execute(q).await.unwrap();
+    let row: neo4rs::Row = result.next().await.unwrap().unwrap();
+    let node: neo4rs::Node = row.get("u").unwrap();
+    let record: UserResponse = UserResponse::from_node(node);
     Ok(warp::reply::with_status(
-        warp::reply::json(&response),
+        warp::reply::json(&record),
         StatusCode::OK,
     ))
 }
 
 pub async fn delete_user(
-    key: String,
+    id: String,
     params: DeleteParams,
-    pool: DbPool,
+    graph: Arc<neo4rs::Graph>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let client = pool.get().await.unwrap();
-    let db = client.db(&db_database()).await.unwrap();
+    let empty: Vec<u8> = vec![];
 
     match params.mode.as_str() {
-        "erase" => erase_user(key, db).await,
-        "trash" => trash_user(key, db).await,
-        "restore" => restore_user(key, db).await,
-        &_ => {
-            let invalid_response: Vec<UserResponse> = vec![];
+        "erase" => {
+            let q: neo4rs::Query = neo4rs::query("
+                MATCH (u:User)
+                WHERE id(u) = $id
+                DETACH DELETE u
+            ")
+            .param("id", id.parse::<i64>().unwrap());
+
+            // delete record directory including image file
+            let mut abs_dirpath = env::current_dir().unwrap();
+            abs_dirpath.push("storage");
+            abs_dirpath.push(id.clone());
+            tokio::fs::remove_dir_all(abs_dirpath).await.unwrap();
+
+            graph.execute(q).await.unwrap();
             Ok(warp::reply::with_status(
-                warp::reply::json(&invalid_response),
+                warp::reply::json(&empty),
                 StatusCode::NO_CONTENT,
             ))
         },
+        "trash" => {
+            let q: neo4rs::Query = neo4rs::query("
+                MATCH (u:User)
+                WHERE id(u) = $id
+                SET u.deletedAt = datetime()
+                RETURN u
+            ")
+            .param("id", id.parse::<i64>().unwrap());
+
+            let mut result: neo4rs::RowStream = graph.execute(q).await.unwrap();
+            let row: neo4rs::Row = result.next().await.unwrap().unwrap();
+            let node: neo4rs::Node = row.get("u").unwrap();
+            let record: UserResponse = UserResponse::from_node(node);
+            Ok(warp::reply::with_status(
+                warp::reply::json(&record),
+                StatusCode::OK,
+            ))
+        },
+        "restore" => {
+            let q: neo4rs::Query = neo4rs::query("
+                MATCH (u:User)
+                WHERE id(u) = $id
+                REMOVE u.deletedAt
+                RETURN u
+            ")
+            .param("id", id.parse::<i64>().unwrap());
+
+            let mut result: neo4rs::RowStream = graph.execute(q).await.unwrap();
+            let row: neo4rs::Row = result.next().await.unwrap().unwrap();
+            let node: neo4rs::Node = row.get("u").unwrap();
+            let record: UserResponse = UserResponse::from_node(node);
+            Ok(warp::reply::with_status(
+                warp::reply::json(&record),
+                StatusCode::OK,
+            ))
+        },
+        &_ => {
+            Ok(warp::reply::with_status(
+                warp::reply::json(&empty),
+                StatusCode::BAD_REQUEST,
+            ))
+        },
     }
-}
-
-async fn erase_user(
-    key: String,
-    db: Database<ReqwestClient>,
-) -> JsonResult { // don't use opaque type to avoid compile error
-    let collection: Collection<ReqwestClient> = db.collection("users").await.unwrap();
-    let options: RemoveOptions = RemoveOptions::builder()
-        .return_old(true)
-        .build();
-
-    let res: DocumentResponse<Document<UpdateUserRequest>> = collection.remove_document(&key, options, None).await.unwrap();
-    let doc: &UpdateUserRequest = res.old_doc().unwrap();
-    let record: UpdateUserRequest = doc.clone();
-    let header = res.header().unwrap();
-
-    // delete record directory including image file
-    let mut abs_dirpath = env::current_dir().unwrap();
-    abs_dirpath.push("storage");
-    abs_dirpath.push(key.clone());
-    tokio::fs::remove_dir_all(abs_dirpath).await.unwrap();
-
-    let response = UserResponse {
-        _id: header._id.clone(),
-        _key: key,
-        _rev: header._rev.clone(),
-        name: record.name.unwrap(),
-        email: record.email.unwrap(),
-        avatar: record.avatar.unwrap(),
-        created_at: record.created_at.unwrap(),
-        updated_at: record.updated_at,
-        deleted_at: record.deleted_at,
-    };
-    Ok(warp::reply::with_status(
-        warp::reply::json(&response),
-        StatusCode::NO_CONTENT,
-    ))
-}
-
-async fn trash_user(
-    key: String,
-    db: Database<ReqwestClient>,
-) -> JsonResult { // don't use opaque type to avoid compile error
-    let collection: Collection<ReqwestClient> = db.collection("users").await.unwrap();
-    let data = TrashUserRequest::default();
-    let options: UpdateOptions = UpdateOptions::builder()
-        .return_new(true)
-        .build();
-
-    let res: DocumentResponse<Document<TrashUserRequest>> = collection.update_document(&key, Document::new(data), options).await.unwrap();
-    let doc: &TrashUserRequest = res.new_doc().unwrap();
-    let record: TrashUserRequest = doc.clone();
-    let header = res.header().unwrap();
-    let response = UserResponse {
-        _id: header._id.clone(),
-        _key: header._key.clone(),
-        _rev: header._rev.clone(),
-        name: record.name.unwrap(),
-        email: record.email.unwrap(),
-        avatar: record.avatar.unwrap(),
-        created_at: record.created_at.unwrap(),
-        updated_at: record.updated_at.unwrap(),
-        deleted_at: Some(record.deleted_at),
-    };
-    Ok(warp::reply::with_status(
-        warp::reply::json(&response),
-        StatusCode::OK,
-    ))
-}
-
-async fn restore_user(
-    key: String,
-    db: Database<ReqwestClient>,
-) -> JsonResult { // don't use opaque type to avoid compile error
-    let collection: Collection<ReqwestClient> = db.collection("users").await.unwrap();
-    let data = RestoreUserRequest::default();
-    let options: UpdateOptions = UpdateOptions::builder()
-        .return_new(true)
-        .keep_null(false)
-        .build();
-
-    let res: DocumentResponse<Document<RestoreUserRequest>> = collection.update_document(&key, Document::new(data), options).await.unwrap();
-    let doc: &RestoreUserRequest = res.new_doc().unwrap();
-    let record: RestoreUserRequest = doc.clone();
-    let header = res.header().unwrap();
-    let response = UserResponse {
-        _id: header._id.clone(),
-        _key: header._key.clone(),
-        _rev: header._rev.clone(),
-        name: record.name.unwrap(),
-        email: record.email.unwrap(),
-        avatar: record.avatar.unwrap(),
-        created_at: record.created_at.unwrap(),
-        updated_at: record.updated_at.unwrap(),
-        deleted_at: None,
-    };
-    Ok(warp::reply::with_status(
-        warp::reply::json(&response),
-        StatusCode::OK,
-    ))
 }

@@ -1,6 +1,5 @@
 use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use validator::Validate;
 
 // find
@@ -35,16 +34,6 @@ pub struct CreateUserParams {
     pub avatar: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct CreateUserRequest {
-    pub name: String,
-    pub email: String,
-    pub password: String,
-    pub avatar: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
 // update
 
 #[derive(Clone, Debug, Default, Validate, Serialize, Deserialize)]
@@ -59,93 +48,31 @@ pub struct UpdateUserParams {
     pub avatar: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct UpdateUserRequest {
-    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
-    pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
-    pub email: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
-    pub password: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
-    pub avatar: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
-    pub created_at: Option<DateTime<Utc>>,
-    pub updated_at: DateTime<Utc>,
-    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
-    pub deleted_at: Option<DateTime<Utc>>,
-}
-
-// delete
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct TrashUserRequest {
-    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
-    pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
-    pub email: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
-    pub avatar: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
-    pub created_at: Option<DateTime<Utc>>,
-    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
-    pub updated_at: Option<DateTime<Utc>>,
-    pub deleted_at: DateTime<Utc>,
-}
-
-impl Default for TrashUserRequest {
-    fn default() -> TrashUserRequest {
-        TrashUserRequest {
-            name: None,
-            email: None,
-            avatar: None,
-            created_at: None,
-            updated_at: None,
-            deleted_at: Utc::now(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct RestoreUserRequest {
-    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
-    pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
-    pub email: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
-    pub avatar: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
-    pub created_at: Option<DateTime<Utc>>,
-    #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
-    pub updated_at: Option<DateTime<Utc>>,
-    pub deleted_at: Option<Value>, // on response, value will not exist
-}
-
-impl Default for RestoreUserRequest {
-    fn default() -> RestoreUserRequest {
-        RestoreUserRequest {
-            name: None,
-            email: None,
-            avatar: None,
-            created_at: None,
-            updated_at: None,
-            deleted_at: Some(Value::Null),
-        }
-    }
-}
-
 // response
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UserResponse {
-    pub _id: String,
-    pub _key: String,
-    pub _rev: String,
+    pub id: i64,
     pub name: String,
     pub email: String,
     pub avatar: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: DateTime<FixedOffset>,
+    pub updated_at: DateTime<FixedOffset>,
     #[serde(skip_serializing_if = "Option::is_none")] // if none, excluded from query
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub deleted_at: Option<DateTime<FixedOffset>>,
+}
+
+impl UserResponse {
+    pub fn from_node(node: neo4rs::Node) -> UserResponse {
+        UserResponse {
+            id: node.id(),
+            name: node.get("name").unwrap(),
+            email: node.get("email").unwrap(),
+            avatar: node.get("avatar").unwrap(),
+            created_at: node.get("createdAt").unwrap(),
+            updated_at: node.get("updatedAt").unwrap(),
+            deleted_at: node.get("deletedAt"),
+        }
+    }
 }

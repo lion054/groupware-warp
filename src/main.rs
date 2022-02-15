@@ -1,4 +1,5 @@
 use dotenv::dotenv;
+use std::sync::Arc;
 use warp::{http::Method, Filter};
 
 mod config;
@@ -18,8 +19,8 @@ async fn main() {
         .allow_header("Content-Type")
         .allow_methods(&[Method::GET, Method::POST, Method::PUT, Method::DELETE]);
 
-    let pool = database::init_pool();
-    let routes = api_filters(pool).with(cors);
+    let graph: Arc<neo4rs::Graph> = database::init_pool().await;
+    let routes = api_filters(graph).with(cors);
 
     warp::serve(routes)
         .run(([127, 0, 0, 1], 8080))
@@ -27,12 +28,12 @@ async fn main() {
 }
 
 fn api_filters(
-    pool: database::DbPool,
+    graph: Arc<neo4rs::Graph>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("api" / "v1" / ..) // Add path prefix /api/v1 to all our routes
         .and(
-            company::init(pool.clone())
-                .or(user::init(pool))
+            company::init(graph.clone())
+                .or(user::init(graph))
                 .recover(error_handler::handle_rejection)
         )
 }

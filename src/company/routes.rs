@@ -1,11 +1,11 @@
 use serde_json::Deserializer;
+use std::sync::Arc;
 use validator::Validate;
 use warp::{
     http::HeaderValue,
     Buf, Filter,
 };
 
-use crate::database::DbPool;
 use crate::helpers::{
     DeleteParams,
     with_db,
@@ -20,66 +20,66 @@ use crate::company::{
 };
 
 pub fn init(
-    pool: DbPool,
+    graph: Arc<neo4rs::Graph>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    find_companies(pool.clone())
-        .or(show_company(pool.clone()))
-        .or(create_company(pool.clone()))
-        .or(update_company(pool.clone()))
-        .or(delete_company(pool))
+    find_companies(graph.clone())
+        .or(show_company(graph.clone()))
+        .or(create_company(graph.clone()))
+        .or(update_company(graph.clone()))
+        .or(delete_company(graph))
 }
 
 /// GET /companies
 fn find_companies(
-    pool: DbPool,
+    graph: Arc<neo4rs::Graph>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("companies")
         .and(warp::get())
         .and(with_find_request())
-        .and(with_db(pool))
+        .and(with_db(graph))
         .and_then(company::find_companies)
 }
 
-/// GET /companies/:key
+/// GET /companies/:id
 fn show_company(
-    pool: DbPool,
+    graph: Arc<neo4rs::Graph>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("companies" / String)
         .and(warp::get())
-        .and(with_db(pool))
+        .and(with_db(graph))
         .and_then(company::show_company)
 }
 
 /// POST /companies
 fn create_company(
-    pool: DbPool,
+    graph: Arc<neo4rs::Graph>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("companies")
         .and(warp::post())
         .and(with_create_params())
-        .and(with_db(pool))
+        .and(with_db(graph))
         .and_then(company::create_company)
 }
 
-/// PUT /companies/:key
+/// PATCH /companies/:id
 fn update_company(
-    pool: DbPool,
+    graph: Arc<neo4rs::Graph>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("companies" / String)
-        .and(warp::put())
+        .and(warp::patch())
         .and(with_update_params())
-        .and(with_db(pool))
+        .and(with_db(graph))
         .and_then(company::update_company)
 }
 
-/// DELETE /companies/:key
+/// DELETE /companies/:id
 fn delete_company(
-    pool: DbPool,
+    graph: Arc<neo4rs::Graph>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("companies" / String)
         .and(warp::delete())
         .and(with_delete_params())
-        .and(with_db(pool))
+        .and(with_db(graph))
         .and_then(company::delete_company)
 }
 

@@ -5,42 +5,66 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "(Windows) Launch debug",
-            "type": "cppvsdbg", // This is VS Code Extension
+            "name": "Program (Debug)",
+            "type": "lldb",
             "request": "launch",
-            "program": "${workspaceRoot}/target/debug/groupware-warp.exe",
+            "program": "${workspaceRoot}/target/debug/groupware-warp",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
             "console": "externalTerminal",
             "preLaunchTask": "cargo debug",
-            "sourceFileMap": {
-                "/rustc/5e1a799842ba6ed4a57e91f7ab9435947482f7d8": "${env:USERPROFILE}/.rustup/toolchains/stable-x86_64-pc-windows-msvc/lib/rustlib/src/rust"
+            "symbolSearchPath": "https://msdl.microsoft.com/download/symbols",
+            "windows": {
+                "program": "${workspaceRoot}/target/debug/groupware-warp.exe",
+                "sourceFileMap": {
+                    "/rustc/*": "${env:USERPROFILE}/.rustup/toolchains/stable-x86_64-pc-windows-msvc/lib/rustlib/src/rust"
+                }
             },
-            "symbolSearchPath": "https://msdl.microsoft.com/download/symbols"
+            "osx": {
+                "cargo": {
+                    "args": [
+                        "test",
+                        "--no-run",
+                        "--lib",
+                        "--package=yourprogram"
+                    ],
+                    "filter": {
+                        "name": "yourprogram",
+                        "kind": "lib"
+                    }
+                },
+                "sourceLanguages": ["rust"],
+                "sourceFileMap": {
+                    "/rustc/*": "${env:HOME}/.rustup/toolchains/stable-x86_64-apple-darwin/lib/rustlib/src/rust"
+                }
+            }
         },
         {
-            "name": "(Windows) Launch release",
-            "type": "cppvsdbg", // This is VS Code Extension
+            "name": "Program (Release)",
+            "type": "lldb",
             "request": "launch",
-            "program": "${workspaceRoot}/target/release/groupware-warp.exe",
+            "program": "${workspaceRoot}/target/release/groupware-warp",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
             "console": "externalTerminal",
             "preLaunchTask": "cargo release",
-            "sourceFileMap": {
-                "/rustc/5e1a799842ba6ed4a57e91f7ab9435947482f7d8": "${env:USERPROFILE}/.rustup/toolchains/stable-x86_64-pc-windows-msvc/lib/rustlib/src/rust"
-            },
-            "symbolSearchPath": "https://msdl.microsoft.com/download/symbols"
+            "symbolSearchPath": "https://msdl.microsoft.com/download/symbols",
+            "windows": {
+                "program": "${workspaceRoot}/target/release/groupware-warp.exe",
+                "sourceFileMap": {
+                    "/rustc/*": "${env:USERPROFILE}/.rustup/toolchains/stable-x86_64-pc-windows-msvc/lib/rustlib/src/rust"
+                }
+            }
         },
         {
-            "name": "(Windows) Launch seeder",
-            "type": "cppvsdbg", // This is VS Code Extension
+            "name": "Seeder (Debug)",
+            "type": "lldb",
             "request": "launch",
-            "program": "${workspaceRoot}/target/debug/groupware-warp.exe",
+            "program": "${workspaceRoot}/target/debug/groupware-warp",
             "args": [
                 "--seed"
             ],
@@ -49,34 +73,12 @@
             "environment": [],
             "console": "externalTerminal",
             "preLaunchTask": "cargo debug",
-            "sourceFileMap": {
-                "/rustc/5e1a799842ba6ed4a57e91f7ab9435947482f7d8": "${env:USERPROFILE}/.rustup/toolchains/stable-x86_64-pc-windows-msvc/lib/rustlib/src/rust"
-            },
-            "symbolSearchPath": "https://msdl.microsoft.com/download/symbols"
-        },
-        {
-            "name": "{OSX} Launch",
-            "type": "lldb",
-            "request": "launch",
-            "program": "${workspaceRoot}/target/debug/groupware-warp",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--no-run",
-                    "--lib",
-                    "--package=yourprogram"
-                ],
-                "filter": {
-                    "name": "yourprogram",
-                    "kind": "lib"
+            "symbolSearchPath": "https://msdl.microsoft.com/download/symbols",
+            "windows": {
+                "program": "${workspaceRoot}/target/debug/groupware-warp.exe",
+                "sourceFileMap": {
+                    "/rustc/*": "${env:USERPROFILE}/.rustup/toolchains/stable-x86_64-pc-windows-msvc/lib/rustlib/src/rust"
                 }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}",
-            "preLaunchTask": "cargo build",
-            "sourceLanguages": ["rust"],
-            "sourceMap": {
-                "/rustc/*": "${env:HOME}/.rustup/toolchains/stable-x86_64-apple-darwin/lib/rustlib/src/rust"
             }
         }
     ]

@@ -1,38 +1,29 @@
+use lazy_static::lazy_static;
+use regex::Regex;
 use serde::Deserialize;
 use std::{
     convert::Infallible,
-    result::Result,
+    sync::Arc,
 };
-use validator::{Validate, ValidationError};
-use warp::{
-    Filter,
-    Rejection,
-    reply::{Json, WithStatus},
-};
-
-use crate::database::DbPool;
-
-pub type JsonResult = Result<WithStatus<Json>, Rejection>;
+use validator::Validate;
+use warp::Filter;
 
 pub fn with_db(
-    pool: DbPool,
-) -> impl Filter<Extract = (DbPool, ), Error = Infallible> + Clone {
+    graph: Arc<neo4rs::Graph>,
+) -> impl Filter<Extract = (Arc<neo4rs::Graph>, ), Error = Infallible> + Clone {
     warp::any().map(move || {
-        pool.clone()
+        graph.clone()
     })
 }
 
 // delete
 
-#[derive(Debug, Validate, Deserialize)]
-pub struct DeleteParams {
-    #[validate(custom = "validate_mode")]
-    pub mode: String,
+lazy_static! {
+    static ref REGEX_THREE_MODES: Regex = Regex::new(r"(erase|trash|restore)").unwrap();
 }
 
-fn validate_mode(mode: &str) -> Result<(), ValidationError> {
-    match mode {
-        "erase" | "trash" | "restore" => Ok(()),
-        _ => Err(ValidationError::new("Wrong mode")),
-    }
+#[derive(Debug, Validate, Deserialize)]
+pub struct DeleteParams {
+    #[validate(regex = "REGEX_THREE_MODES")]
+    pub mode: String,
 }

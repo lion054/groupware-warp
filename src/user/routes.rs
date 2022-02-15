@@ -4,6 +4,7 @@ use std::{
     env,
     ffi::OsStr,
     path::Path,
+    sync::Arc,
 };
 use futures::{StreamExt, TryStreamExt};
 use serde_json::Deserializer;
@@ -15,7 +16,6 @@ use warp::{
     Filter,
 };
 
-use crate::database::DbPool;
 use crate::helpers::{
     DeleteParams,
     with_db,
@@ -30,66 +30,66 @@ use crate::user::{
 };
 
 pub fn init(
-    pool: DbPool,
+    graph: Arc<neo4rs::Graph>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    find_users(pool.clone())
-        .or(show_user(pool.clone()))
-        .or(create_user(pool.clone()))
-        .or(update_user(pool.clone()))
-        .or(delete_user(pool))
+    find_users(graph.clone())
+        .or(show_user(graph.clone()))
+        .or(create_user(graph.clone()))
+        .or(update_user(graph.clone()))
+        .or(delete_user(graph))
 }
 
 /// GET /users
 fn find_users(
-    pool: DbPool,
+    graph: Arc<neo4rs::Graph>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("users")
         .and(warp::get())
         .and(with_find_request())
-        .and(with_db(pool))
+        .and(with_db(graph))
         .and_then(user::find_users)
 }
 
-/// GET /users/:key
+/// GET /users/:id
 fn show_user(
-    pool: DbPool,
+    graph: Arc<neo4rs::Graph>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("users" / String)
         .and(warp::get())
-        .and(with_db(pool))
+        .and(with_db(graph))
         .and_then(user::show_user)
 }
 
 /// POST /users
 fn create_user(
-    pool: DbPool,
+    graph: Arc<neo4rs::Graph>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("users")
         .and(warp::post())
         .and(with_create_params())
-        .and(with_db(pool))
+        .and(with_db(graph))
         .and_then(user::create_user)
 }
 
-/// PUT /users/:key
+/// PATCH /users/:id
 fn update_user(
-    pool: DbPool,
+    graph: Arc<neo4rs::Graph>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("users" / String)
-        .and(warp::put())
+        .and(warp::patch())
         .and(with_update_params())
-        .and(with_db(pool))
+        .and(with_db(graph))
         .and_then(user::update_user)
 }
 
-/// DELETE /users/:key
+/// DELETE /users/:id
 fn delete_user(
-    pool: DbPool,
+    graph: Arc<neo4rs::Graph>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("users" / String)
         .and(warp::delete())
         .and(with_delete_params())
-        .and(with_db(pool))
+        .and(with_db(graph))
         .and_then(user::delete_user)
 }
 

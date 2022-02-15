@@ -1,43 +1,23 @@
-use arangors::{
-    connection::ReqwestClient,
-    document::{
-        options::{InsertOptions, RemoveOptions, UpdateOptions},
-        response::DocumentResponse,
-    },
-    AqlQuery, Collection, Database, Document,
-};
-use chrono::prelude::*;
 use std::{
     convert::Infallible,
+    sync::Arc,
     vec::Vec,
 };
 use warp::http::StatusCode;
 
-use crate::config::db_database;
-use crate::database::DbPool;
-use crate::helpers::{
-    DeleteParams,
-    JsonResult,
-};
 use crate::company::{
     CompanyResponse,
     CreateCompanyParams,
-    CreateCompanyRequest,
     FindCompaniesRequest,
-    RestoreCompanyRequest,
-    TrashCompanyRequest,
     UpdateCompanyParams,
-    UpdateCompanyRequest,
 };
+use crate::helpers::DeleteParams;
 
 pub async fn find_companies(
     req: FindCompaniesRequest,
-    pool: DbPool,
+    graph: Arc<neo4rs::Graph>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let client = pool.get().await.unwrap();
-    let db = client.db(&db_database()).await.unwrap();
-
-    let mut terms = vec!["FOR x IN companies"];
+    let mut terms = vec!["MATCH (c:Company)"];
     let search_term;
     let sort_by_term;
     let limit_term;
@@ -45,232 +25,178 @@ pub async fn find_companies(
     if req.search.is_some() {
         let search: String = req.search.unwrap().trim().to_string().clone();
         if !search.is_empty() {
-            search_term = format!("FILTER CONTAINS(x.name, '{}')", search);
+            search_term = format!("WHERE c.name CONTAINS '{}'", search);
             terms.push(search_term.as_str());
         }
     }
     if req.sort_by.is_some() {
         let sort_by: String = req.sort_by.unwrap();
-        sort_by_term = format!("SORT x.{} ASC", sort_by);
+        sort_by_term = format!("ORDER BY c.{} ASC", sort_by);
         terms.push(sort_by_term.as_str());
     }
     if req.limit.is_some() {
         let limit: u32 = req.limit.unwrap();
-        limit_term = format!("LIMIT 0, {}", limit);
+        limit_term = format!("SKIP 0 LIMIT {}", limit);
         terms.push(limit_term.as_str());
     }
 
-    terms.push("RETURN x");
+    terms.push("RETURN c");
     let q = terms.join(" ");
 
-    // don't use HashMap for query binding, in order to avoid panick of tokio worker thread
-    let aql = AqlQuery::builder()
-        .query(q.as_str())
-        .build();
-    let records: Vec<CompanyResponse> = db.aql_query(aql).await.unwrap();
+    let mut result: neo4rs::RowStream = graph.execute(neo4rs::query(&q)).await.unwrap();
+    let mut records: Vec<CompanyResponse> = vec![];
+    while let Ok(Some(row)) = result.next().await {
+        let node: neo4rs::Node = row.get("c").unwrap();
+        records.push(CompanyResponse::from_node(node));
+    }
     Ok(warp::reply::json(&records))
 }
 
 pub async fn show_company(
-    key: String,
-    pool: DbPool,
+    id: String,
+    graph: Arc<neo4rs::Graph>,
 ) -> Result<impl warp::Reply, Infallible> {
-    let client = pool.get().await.unwrap();
-    let db = client.db(&db_database()).await.unwrap();
+    let q: neo4rs::Query = neo4rs::query("
+        MATCH (c:Company)
+        WHERE id(c) = $id
+        RETURN c
+    ")
+    .param("id", id.parse::<i64>().unwrap());
 
-    let collection: Collection<ReqwestClient> = db.collection("companies").await.unwrap();
-    let result: Document<CompanyResponse> = collection.document(key.as_ref()).await.unwrap();
-    let record: CompanyResponse = result.document;
+    let mut result: neo4rs::RowStream = graph.execute(q).await.unwrap();
+    let row: neo4rs::Row = result.next().await.unwrap().unwrap();
+    let node: neo4rs::Node = row.get("c").unwrap();
+    let record: CompanyResponse = CompanyResponse::from_node(node);
     Ok(warp::reply::json(&record))
 }
 
 pub async fn create_company(
     params: CreateCompanyParams,
-    pool: DbPool,
+    graph: Arc<neo4rs::Graph>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let client = pool.get().await.unwrap();
-    let db = client.db(&db_database()).await.unwrap();
+    let q: neo4rs::Query = neo4rs::query("
+        CREATE (c:Company {
+            name: $name,
+            since: date($since),
+            createdAt: datetime(),
+            updatedAt: datetime()
+        })
+        RETURN c
+    ")
+    .param("name", params.name.unwrap())
+    .param("since", params.since.unwrap());
 
-    let collection: Collection<ReqwestClient> = db.collection("companies").await.unwrap();
-    let now = Utc::now();
-
-    let req = CreateCompanyRequest {
-        name: params.name.unwrap().clone(),
-        since: params.since.unwrap(),
-        created_at: now,
-        updated_at: now,
-    };
-    let options: InsertOptions = InsertOptions::builder()
-        .return_new(true)
-        .build();
-    let result: DocumentResponse<Document<CreateCompanyRequest>> = collection.create_document(Document::new(req), options).await.unwrap();
-
-    let doc: &CreateCompanyRequest = result.new_doc().unwrap();
-    let record: CreateCompanyRequest = doc.clone();
-    let header = result.header().unwrap();
-    let response = CompanyResponse {
-        _id: header._id.clone(),
-        _key: header._key.clone(),
-        _rev: header._rev.clone(),
-        name: record.name,
-        since: record.since,
-        created_at: record.created_at,
-        updated_at: record.updated_at,
-        deleted_at: None,
-    };
+    let mut result: neo4rs::RowStream = graph.execute(q).await.unwrap();
+    let row: neo4rs::Row = result.next().await.unwrap().unwrap();
+    let node: neo4rs::Node = row.get("c").unwrap();
+    let record: CompanyResponse = CompanyResponse::from_node(node);
     Ok(warp::reply::with_status(
-        warp::reply::json(&response),
+        warp::reply::json(&record),
         StatusCode::CREATED,
     ))
 }
 
 pub async fn update_company(
-    key: String,
+    id: String,
     params: UpdateCompanyParams,
-    pool: DbPool,
+    graph: Arc<neo4rs::Graph>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let client = pool.get().await.unwrap();
-    let db = client.db(&db_database()).await.unwrap();
+    let mut terms = vec!["MATCH (c:Company)"];
+    let w = format!("WHERE id(c) = {}", id);
+    terms.push(w.as_str());
 
-    let collection: Collection<ReqwestClient> = db.collection("companies").await.unwrap();
-    let req = UpdateCompanyRequest {
-        name: params.name,
-        since: params.since,
-        created_at: None,
-        updated_at: Utc::now(),
-        deleted_at: None,
-    };
-    let options: UpdateOptions = UpdateOptions::builder()
-        .return_new(true)
-        .build();
+    let mut data = vec![];
+    match params.name {
+        Some(x) => {
+            data.push(format!("c.name = '{}'", x));
+        },
+        None => {},
+    }
+    match params.since {
+        Some(x) => {
+            data.push(format!("c.since = date('{}')", x.to_rfc3339()));
+        },
+        None => {},
+    }
+    let s = format!("SET {}", data.join(", "));
+    terms.push(s.as_str());
+    terms.push("RETURN c");
 
-    let res: DocumentResponse<Document<UpdateCompanyRequest>> = collection.update_document(&key, Document::new(req), options).await.unwrap();
-    let record: &UpdateCompanyRequest = res.new_doc().unwrap();
-    let header = res.header().unwrap();
-    let response = CompanyResponse {
-        _id: header._id.clone(),
-        _key: header._key.clone(),
-        _rev: header._rev.clone(),
-        name: record.name.clone().unwrap(),
-        since: record.since.unwrap(),
-        created_at: record.created_at.unwrap(),
-        updated_at: record.updated_at,
-        deleted_at: record.deleted_at,
-    };
+    let t = terms.join(" ");
+    let q: neo4rs::Query = neo4rs::query(t.as_str());
+    let mut result: neo4rs::RowStream = graph.execute(q).await.unwrap();
+    let row: neo4rs::Row = result.next().await.unwrap().unwrap();
+    let node: neo4rs::Node = row.get("c").unwrap();
+    let record: CompanyResponse = CompanyResponse::from_node(node);
     Ok(warp::reply::with_status(
-        warp::reply::json(&response),
+        warp::reply::json(&record),
         StatusCode::OK,
     ))
 }
 
 pub async fn delete_company(
-    key: String,
+    id: String,
     params: DeleteParams,
-    pool: DbPool,
+    graph: Arc<neo4rs::Graph>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let client = pool.get().await.unwrap();
-    let db = client.db(&db_database()).await.unwrap();
+    let empty: Vec<u8> = vec![];
 
     match params.mode.as_str() {
-        "erase" => erase_company(key, db).await,
-        "trash" => trash_company(key, db).await,
-        "restore" => restore_company(key, db).await,
-        &_ => {
-            let invalid_response: Vec<CompanyResponse> = vec![];
+        "erase" => {
+            let q: neo4rs::Query = neo4rs::query("
+                MATCH (c:Company)
+                WHERE id(c) = $id
+                DETACH DELETE c
+            ")
+            .param("id", id.parse::<i64>().unwrap());
+
+            graph.execute(q).await.unwrap();
             Ok(warp::reply::with_status(
-                warp::reply::json(&invalid_response),
+                warp::reply::json(&empty),
                 StatusCode::NO_CONTENT,
             ))
         },
+        "trash" => {
+            let q: neo4rs::Query = neo4rs::query("
+                MATCH (c:Company)
+                WHERE id(c) = $id
+                SET c.deletedAt = datetime()
+                RETURN c
+            ")
+            .param("id", id.parse::<i64>().unwrap());
+
+            let mut result: neo4rs::RowStream = graph.execute(q).await.unwrap();
+            let row: neo4rs::Row = result.next().await.unwrap().unwrap();
+            let node: neo4rs::Node = row.get("c").unwrap();
+            let record: CompanyResponse = CompanyResponse::from_node(node);
+            Ok(warp::reply::with_status(
+                warp::reply::json(&record),
+                StatusCode::OK,
+            ))
+        },
+        "restore" => {
+            let q: neo4rs::Query = neo4rs::query("
+                MATCH (c:Company)
+                WHERE id(c) = $id
+                REMOVE c.deletedAt
+                RETURN c
+            ")
+            .param("id", id.parse::<i64>().unwrap());
+
+            let mut result: neo4rs::RowStream = graph.execute(q).await.unwrap();
+            let row: neo4rs::Row = result.next().await.unwrap().unwrap();
+            let node: neo4rs::Node = row.get("c").unwrap();
+            let record: CompanyResponse = CompanyResponse::from_node(node);
+            Ok(warp::reply::with_status(
+                warp::reply::json(&record),
+                StatusCode::OK,
+            ))
+        },
+        &_ => {
+            Ok(warp::reply::with_status(
+                warp::reply::json(&empty),
+                StatusCode::BAD_REQUEST,
+            ))
+        },
     }
-}
-
-async fn erase_company(
-    key: String,
-    db: Database<ReqwestClient>,
-) -> JsonResult { // don't use opaque type to avoid compile error
-    let collection: Collection<ReqwestClient> = db.collection("companies").await.unwrap();
-    let options: RemoveOptions = RemoveOptions::builder()
-        .return_old(true)
-        .build();
-
-    let res: DocumentResponse<Document<UpdateCompanyRequest>> = collection.remove_document(&key, options, None).await.unwrap();
-    let doc: &UpdateCompanyRequest = res.old_doc().unwrap();
-    let record: UpdateCompanyRequest = doc.clone();
-    let header = res.header().unwrap();
-    let response = CompanyResponse {
-        _id: header._id.clone(),
-        _key: header._key.clone(),
-        _rev: header._rev.clone(),
-        name: record.name.unwrap(),
-        since: record.since.unwrap(),
-        created_at: record.created_at.unwrap(),
-        updated_at: record.updated_at,
-        deleted_at: record.deleted_at,
-    };
-    Ok(warp::reply::with_status(
-        warp::reply::json(&response),
-        StatusCode::NO_CONTENT,
-    ))
-}
-
-async fn trash_company(
-    key: String,
-    db: Database<ReqwestClient>,
-) -> JsonResult { // don't use opaque type to avoid compile error
-    let collection: Collection<ReqwestClient> = db.collection("companies").await.unwrap();
-    let data = TrashCompanyRequest::default();
-    let options: UpdateOptions = UpdateOptions::builder()
-        .return_new(true)
-        .build();
-
-    let res: DocumentResponse<Document<TrashCompanyRequest>> = collection.update_document(&key, Document::new(data), options).await.unwrap();
-    let doc: &TrashCompanyRequest = res.new_doc().unwrap();
-    let record: TrashCompanyRequest = doc.clone();
-    let header = res.header().unwrap();
-    let response = CompanyResponse {
-        _id: header._id.clone(),
-        _key: header._key.clone(),
-        _rev: header._rev.clone(),
-        name: record.name.unwrap(),
-        since: record.since.unwrap(),
-        created_at: record.created_at.unwrap(),
-        updated_at: record.updated_at.unwrap(),
-        deleted_at: Some(record.deleted_at),
-    };
-    Ok(warp::reply::with_status(
-        warp::reply::json(&response),
-        StatusCode::OK,
-    ))
-}
-
-async fn restore_company(
-    key: String,
-    db: Database<ReqwestClient>,
-) -> JsonResult { // don't use opaque type to avoid compile error
-    let collection: Collection<ReqwestClient> = db.collection("companies").await.unwrap();
-    let data = RestoreCompanyRequest::default();
-    let options: UpdateOptions = UpdateOptions::builder()
-        .return_new(true)
-        .keep_null(false)
-        .build();
-
-    let res: DocumentResponse<Document<RestoreCompanyRequest>> = collection.update_document(&key, Document::new(data), options).await.unwrap();
-    let doc: &RestoreCompanyRequest = res.new_doc().unwrap();
-    let record: RestoreCompanyRequest = doc.clone();
-    let header = res.header().unwrap();
-    let response = CompanyResponse {
-        _id: header._id.clone(),
-        _key: header._key.clone(),
-        _rev: header._rev.clone(),
-        name: record.name.unwrap(),
-        since: record.since.unwrap(),
-        created_at: record.created_at.unwrap(),
-        updated_at: record.updated_at.unwrap(),
-        deleted_at: None,
-    };
-    Ok(warp::reply::with_status(
-        warp::reply::json(&response),
-        StatusCode::OK,
-    ))
 }

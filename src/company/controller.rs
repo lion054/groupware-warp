@@ -31,7 +31,7 @@ pub async fn find_companies(
     }
     if req.sort_by.is_some() {
         let sort_by: String = req.sort_by.unwrap();
-        sort_by_term = format!("ORDER BY c.{} ASC", sort_by);
+        sort_by_term = format!("SORT c.{} ASC", sort_by);
         terms.push(sort_by_term.as_str());
     }
     if req.limit.is_some() {
@@ -46,8 +46,7 @@ pub async fn find_companies(
     let mut result: neo4rs::RowStream = graph.execute(neo4rs::query(&q)).await.unwrap();
     let mut records: Vec<CompanyResponse> = vec![];
     while let Ok(Some(row)) = result.next().await {
-        let node: neo4rs::Node = row.get("c").unwrap();
-        records.push(CompanyResponse::from_node(node));
+        records.push(CompanyResponse::from_row(row));
     }
     Ok(warp::reply::json(&records))
 }
@@ -65,8 +64,7 @@ pub async fn show_company(
 
     let mut result: neo4rs::RowStream = graph.execute(q).await.unwrap();
     let row: neo4rs::Row = result.next().await.unwrap().unwrap();
-    let node: neo4rs::Node = row.get("c").unwrap();
-    let record: CompanyResponse = CompanyResponse::from_node(node);
+    let record: CompanyResponse = CompanyResponse::from_row(row);
     Ok(warp::reply::json(&record))
 }
 
@@ -88,8 +86,7 @@ pub async fn create_company(
 
     let mut result: neo4rs::RowStream = graph.execute(q).await.unwrap();
     let row: neo4rs::Row = result.next().await.unwrap().unwrap();
-    let node: neo4rs::Node = row.get("c").unwrap();
-    let record: CompanyResponse = CompanyResponse::from_node(node);
+    let record: CompanyResponse = CompanyResponse::from_row(row);
     Ok(warp::reply::with_status(
         warp::reply::json(&record),
         StatusCode::CREATED,
@@ -126,8 +123,7 @@ pub async fn update_company(
     let q: neo4rs::Query = neo4rs::query(t.as_str());
     let mut result: neo4rs::RowStream = graph.execute(q).await.unwrap();
     let row: neo4rs::Row = result.next().await.unwrap().unwrap();
-    let node: neo4rs::Node = row.get("c").unwrap();
-    let record: CompanyResponse = CompanyResponse::from_node(node);
+    let record: CompanyResponse = CompanyResponse::from_row(row);
     Ok(warp::reply::with_status(
         warp::reply::json(&record),
         StatusCode::OK,
@@ -167,8 +163,7 @@ pub async fn delete_company(
 
             let mut result: neo4rs::RowStream = graph.execute(q).await.unwrap();
             let row: neo4rs::Row = result.next().await.unwrap().unwrap();
-            let node: neo4rs::Node = row.get("c").unwrap();
-            let record: CompanyResponse = CompanyResponse::from_node(node);
+            let record: CompanyResponse = CompanyResponse::from_row(row);
             Ok(warp::reply::with_status(
                 warp::reply::json(&record),
                 StatusCode::OK,
@@ -185,8 +180,7 @@ pub async fn delete_company(
 
             let mut result: neo4rs::RowStream = graph.execute(q).await.unwrap();
             let row: neo4rs::Row = result.next().await.unwrap().unwrap();
-            let node: neo4rs::Node = row.get("c").unwrap();
-            let record: CompanyResponse = CompanyResponse::from_node(node);
+            let record: CompanyResponse = CompanyResponse::from_row(row);
             Ok(warp::reply::with_status(
                 warp::reply::json(&record),
                 StatusCode::OK,

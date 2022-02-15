@@ -50,7 +50,7 @@ pub struct UpdateUserParams {
 
 // response
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserResponse {
     pub id: i64,
@@ -64,15 +64,16 @@ pub struct UserResponse {
 }
 
 impl UserResponse {
-    pub fn from_node(node: neo4rs::Node) -> UserResponse {
+    pub fn from_row(row: neo4rs::Row) -> UserResponse {
+        let u: neo4rs::Node = row.get("u").unwrap();
         UserResponse {
-            id: node.id(),
-            name: node.get("name").unwrap(),
-            email: node.get("email").unwrap(),
-            avatar: node.get("avatar").unwrap(),
-            created_at: node.get("createdAt").unwrap(),
-            updated_at: node.get("updatedAt").unwrap(),
-            deleted_at: node.get("deletedAt"),
+            id: u.id(),
+            name: u.get("name").unwrap(),
+            email: u.get("email").unwrap(),
+            avatar: u.get("avatar").unwrap(),
+            created_at: u.get("createdAt").unwrap(),
+            updated_at: u.get("updatedAt").unwrap(),
+            deleted_at: u.get("deletedAt"),
         }
     }
 }

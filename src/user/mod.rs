@@ -1,7 +1,7 @@
-mod models;
-mod controllers;
-mod routes;
+mod model;
+mod controller;
+mod router;
 
-pub use models::*;
-pub use controllers::*;
-pub use routes::init;
+pub use model::*;
+pub use controller::*;
+pub use router::init;

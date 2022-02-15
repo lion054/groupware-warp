@@ -38,7 +38,7 @@ pub struct UpdateCompanyParams {
 
 // response
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompanyResponse {
     pub id: i64,
@@ -51,14 +51,15 @@ pub struct CompanyResponse {
 }
 
 impl CompanyResponse {
-    pub fn from_node(node: neo4rs::Node) -> CompanyResponse {
+    pub fn from_row(row: neo4rs::Row) -> CompanyResponse {
+        let c: neo4rs::Node = row.get("c").unwrap();
         CompanyResponse {
-            id: node.id(),
-            name: node.get("name").unwrap(),
-            since: node.get("since").unwrap(),
-            created_at: node.get("createdAt").unwrap(),
-            updated_at: node.get("updatedAt").unwrap(),
-            deleted_at: node.get("deletedAt"),
+            id: c.id(),
+            name: c.get("name").unwrap(),
+            since: c.get("since").unwrap(),
+            created_at: c.get("createdAt").unwrap(),
+            updated_at: c.get("updatedAt").unwrap(),
+            deleted_at: c.get("deletedAt"),
         }
     }
 }

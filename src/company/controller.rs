@@ -34,13 +34,13 @@ pub async fn find_companies(
         sort_by_term = format!("SORT c.{} ASC", sort_by);
         terms.push(sort_by_term.as_str());
     }
+
+    terms.push("RETURN c");
     if req.limit.is_some() {
         let limit: u32 = req.limit.unwrap();
         limit_term = format!("SKIP 0 LIMIT {}", limit);
         terms.push(limit_term.as_str());
     }
-
-    terms.push("RETURN c");
     let q = terms.join(" ");
 
     let mut result: neo4rs::RowStream = graph.execute(neo4rs::query(&q)).await.unwrap();

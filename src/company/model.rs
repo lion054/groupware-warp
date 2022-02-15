@@ -1,4 +1,6 @@
 use chrono::prelude::*;
+use lazy_static::lazy_static;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -11,10 +13,16 @@ pub struct FindCompaniesParams {
     pub limit: Option<String>,
 }
 
-#[derive(Default)]
+lazy_static! {
+    static ref REGEX_SORT_BY: Regex = Regex::new(r"(name|capacity)").unwrap();
+}
+
+#[derive(Default, Validate)]
 pub struct FindCompaniesRequest {
     pub search: Option<String>,
+    #[validate(regex = "REGEX_SORT_BY")]
     pub sort_by: Option<String>,
+    #[validate(range(min = 5, max = 100))]
     pub limit: Option<u32>,
 }
 

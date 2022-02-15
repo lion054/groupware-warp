@@ -4,7 +4,6 @@ use std::{
     vec::Vec,
 };
 use thiserror::Error;
-use validator::{ValidationErrors, ValidationErrorsKind};
 use warp::{
     cors::CorsForbidden,
     http::StatusCode,
@@ -16,7 +15,7 @@ pub enum ApiError {
     #[error("{0}")]
     ParsingError(String, String),
     #[error("validation error: {0}")]
-    ValidationError(ValidationErrors),
+    ValidationErrors(validator::ValidationErrors),
 }
 
 impl warp::reject::Reject for ApiError {}
@@ -61,21 +60,21 @@ pub async fn handle_rejection(
                 }];
                 (StatusCode::BAD_REQUEST, "Parsing errors".to_string(), Some(errors))
             },
-            ApiError::ValidationError(val_errs) => {
+            ApiError::ValidationErrors(val_errs) => {
                 let errors: Vec<FieldError> = val_errs
                     .errors()
                     .iter()
                     .map(|error_kind| FieldError {
                         field: error_kind.0.to_string(),
                         messages: match error_kind.1 {
-                            ValidationErrorsKind::Struct(struct_err) => {
+                            validator::ValidationErrorsKind::Struct(struct_err) => {
                                 validation_errs_to_str_vec(struct_err)
                             },
-                            ValidationErrorsKind::Field(field_errs) => field_errs
+                            validator::ValidationErrorsKind::Field(field_errs) => field_errs
                                 .iter()
                                 .map(|fe| format!("{}", fe.code))
                                 .collect(),
-                            ValidationErrorsKind::List(vec_errs) => vec_errs
+                            validator::ValidationErrorsKind::List(vec_errs) => vec_errs
                                 .iter()
                                 .map(|ve| {
                                     let err_text = validation_errs_to_str_vec(ve.1).join(" | ");
@@ -103,7 +102,7 @@ pub async fn handle_rejection(
     Ok(warp::reply::with_status(json, code))
 }
 
-fn validation_errs_to_str_vec(ve: &ValidationErrors) -> Vec<String> {
+fn validation_errs_to_str_vec(ve: &validator::ValidationErrors) -> Vec<String> {
     ve.field_errors()
         .iter()
         .map(|fe| {

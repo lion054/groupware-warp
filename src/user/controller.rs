@@ -39,13 +39,13 @@ pub async fn find_users(
         sort_by_term = format!("SORT u.{} ASC", sort_by);
         terms.push(sort_by_term.as_str());
     }
+
+    terms.push("RETURN u");
     if req.limit.is_some() {
         let limit: u32 = req.limit.unwrap();
         limit_term = format!("SKIP 0 LIMIT {}", limit);
         terms.push(limit_term.as_str());
     }
-
-    terms.push("RETURN u");
     let q = terms.join(" ");
 
     let mut result: neo4rs::RowStream = graph.execute(neo4rs::query(&q)).await.unwrap();

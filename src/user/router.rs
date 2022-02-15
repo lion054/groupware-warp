@@ -104,16 +104,7 @@ fn with_find_request() -> impl Filter<Extract = (FindUsersRequest, ), Error = wa
             req.search = params.search;
         }
         if params.sort_by.is_some() {
-            let sort_by = params.sort_by.unwrap();
-            match sort_by.as_str() {
-                "name" | "email" => (),
-                &_ => {
-                    return Err(warp::reject::custom(
-                        ApiError::ParsingError("sort_by".to_string(), "Must be one of name and email".to_string())
-                    ));
-                },
-            }
-            req.sort_by = Some(sort_by);
+            req.sort_by = params.sort_by;
         }
         if params.limit.is_some() {
             let limit = match params.limit.unwrap().parse::<u32>() {
@@ -124,14 +115,14 @@ fn with_find_request() -> impl Filter<Extract = (FindUsersRequest, ), Error = wa
                     ));
                 },
             };
-            if limit < 1 && limit > 100 {
-                return Err(warp::reject::custom(
-                    ApiError::ParsingError("limit".to_string(), "Must be between 1 and 100".to_string())
-                ));
-            }
             req.limit = Some(limit);
         }
-        Ok(req)
+        match req.validate() {
+            Ok(_) => Ok(req),
+            Err(e) => Err(warp::reject::custom(
+                ApiError::ValidationErrors(e)
+            )),
+        }
     })
 }
 
@@ -191,7 +182,7 @@ async fn validate_create_params(
         Ok(_) => Ok(params),
         Err(e) => {
             Err(warp::reject::custom(
-                ApiError::ValidationError(e)
+                ApiError::ValidationErrors(e)
             ))
         },
     }
@@ -253,7 +244,7 @@ async fn validate_update_params(
         Ok(_) => Ok(params),
         Err(e) => {
             Err(warp::reject::custom(
-                ApiError::ValidationError(e)
+                ApiError::ValidationErrors(e)
             ))
         },
     }
@@ -338,7 +329,7 @@ async fn validate_delete_params(
         Ok(_) => (),
         Err(e) => {
             return Err(warp::reject::custom(
-                ApiError::ValidationError(e)
+                ApiError::ValidationErrors(e)
             ));
         },
     }

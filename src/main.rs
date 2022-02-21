@@ -23,7 +23,7 @@ async fn main() {
     let routes = api_filters(graph).with(cors);
 
     warp::serve(routes)
-        .run(([127, 0, 0, 1], 8080))
+        .run(([127, 0, 0, 1], 7070))
         .await;
 }
 
